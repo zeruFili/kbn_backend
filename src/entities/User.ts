@@ -1,0 +1,58 @@
+import {
+  Entity, PrimaryColumn, Column, CreateDateColumn,
+  Index, UpdateDateColumn,
+} from "typeorm";
+import { UserRole } from "../enums/user-role.enum";
+
+@Entity("user")
+export class User {
+  @PrimaryColumn({ type: "uuid", default: () => "gen_random_uuid()" })
+  id: string;
+
+  @Column({ type: "varchar", length: 255 })
+  full_name: string;
+
+  @Index({ unique: true })
+  @Column({ type: "varchar", length: 255 })
+  email: string;
+
+  @Column({ type: "varchar", length: 255, select: false })
+  password_hash: string;
+
+  @Column({ type: "varchar", length: 20, nullable: true })
+  phone: string;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  website: string;
+
+  @Column({ type: "text", nullable: true })
+  education: string;
+
+  @Column({ type: "text", nullable: true })
+  achievement: string;
+
+  @Column({ type: "text", nullable: true })
+  professional_experience: string;
+
+  @Column({ type: "boolean", default: true })
+  is_active: boolean;
+
+  @Column({ type: "smallint", default: 1 })
+  rank: number; // 1 - 10
+
+  @Index()
+  @Column({ type: "enum", enum: UserRole })
+  role: UserRole;
+
+  @Column({ type: "timestamptz", nullable: true })
+  last_login_at: Date;
+
+  @CreateDateColumn({ type: "timestamptz", default: () => "NOW()" })
+  created_at: Date;
+
+  @UpdateDateColumn({ type: "timestamptz", nullable: true })
+  updated_at: Date;
+
+  @Column({ type: "uuid" })
+  created_by: string;
+}

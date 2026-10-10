@@ -8,7 +8,6 @@ const SAFE_USER_COLUMNS = [
   "last_login_at",
   "created_at",
   "updated_at",
-  "created_by",
 ] as const;
 
 export function safeUserColumns(alias: string): string[] {

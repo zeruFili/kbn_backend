@@ -24,7 +24,6 @@ interface CreateUserInput {
   role: UserRole;
   phone?: string;
   is_active?: boolean;
-  createdBy?: string;
 }
 
 interface UpdateUserInput {
@@ -122,7 +121,6 @@ export class UserService {
       role: dto.role,
       phone: (dto.phone || undefined) as any,
       is_active: dto.is_active ?? true,
-      created_by: dto.createdBy,
     });
 
     const saved = await userRepo().save(user);

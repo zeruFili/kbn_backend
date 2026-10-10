@@ -29,3 +29,15 @@ export function contentResourceId(req: Request): string {
   }
   return id;
 }
+
+export function optionalStringArray(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+
+  if (typeof value === "string" && value.length > 0) {
+    return [value];
+  }
+
+  return undefined;
+}

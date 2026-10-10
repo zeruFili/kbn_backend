@@ -2,6 +2,7 @@ import { AppDataSource } from "../config/data-source";
 import { Article } from "../entities/aricle";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateArticleDto, UpdateArticleDto } from "../validators/article.dto";
+import { generateSlug } from "../utils/slug.utils";
 
 const repo = () => AppDataSource.getRepository(Article);
 
@@ -24,14 +25,17 @@ export class ArticleService {
   }
 
   async create(dto: CreateArticleDto, adminId: string): Promise<Article> {
-    await ensureUnique(dto.title, dto.slug);
-    return repo().save(repo().create({ ...dto, author_id: adminId }));
+    const slug = generateSlug(dto.title);
+    await ensureUnique(dto.title, slug);
+    return repo().save(repo().create({ ...dto, slug, author_id: adminId }));
   }
 
   async update(id: string, dto: UpdateArticleDto): Promise<Article> {
     const article = await this.findById(id);
-    await ensureUnique(dto.title ?? article.title, dto.slug ?? article.slug, id);
-    Object.assign(article, dto);
+    const title = dto.title ?? article.title;
+    const slug = dto.title !== undefined ? generateSlug(title) : article.slug;
+    await ensureUnique(title, slug, id);
+    Object.assign(article, dto, { slug });
     return repo().save(article);
   }
 

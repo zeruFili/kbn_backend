@@ -99,6 +99,7 @@ export function createUploadFileMiddleware(options: UploadMiddlewareOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
     upload(req, res, (err: any) => {
       if (err instanceof multer.MulterError) {
+        cleanupUploadedFiles(req);
         let errorMessage: string;
         if (err.code === "LIMIT_FILE_SIZE") {
           errorMessage = `File size exceeds the limit of ${Math.round(fileSizeLimit / 1048576)}MB`;
@@ -114,6 +115,7 @@ export function createUploadFileMiddleware(options: UploadMiddlewareOptions) {
           message: errorMessage,
         });
       } else if (err) {
+        cleanupUploadedFiles(req);
         return res.status(400).json({
           success: false,
           message: err.message,

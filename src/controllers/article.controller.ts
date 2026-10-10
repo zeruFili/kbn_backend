@@ -3,6 +3,7 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { CreateArticleDto, UpdateArticleDto } from "../validators/article.dto";
 import { articleService } from "../services/article.service";
 import { contentAdminId, contentResourceId, validateContentDto } from "../utils/content-controller.utils";
+import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
 
 export class ArticleController {
   async list(_req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -13,15 +14,29 @@ export class ArticleController {
   }
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const dto = await validateContentDto(CreateArticleDto, req.body);
+      const uploadedFiles = getFilePathsFromRequest(req, "article");
+      const dto = await validateContentDto(CreateArticleDto, {
+        ...req.body,
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+      });
       res.status(201).json({ success: true, data: await articleService.create(dto, contentAdminId(req)), message: "Article created successfully" });
-    } catch (error) { next(error); }
+    } catch (error) {
+      cleanupUploadedFiles(req);
+      next(error);
+    }
   }
   async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const dto = await validateContentDto(UpdateArticleDto, req.body);
+      const uploadedFiles = getFilePathsFromRequest(req, "article");
+      const dto = await validateContentDto(UpdateArticleDto, {
+        ...req.body,
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+      });
       res.status(200).json({ success: true, data: await articleService.update(contentResourceId(req), dto), message: "Article updated successfully" });
-    } catch (error) { next(error); }
+    } catch (error) {
+      cleanupUploadedFiles(req);
+      next(error);
+    }
   }
   async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     try { await articleService.remove(contentResourceId(req)); res.status(200).json({ success: true, message: "Article deleted successfully" }); } catch (error) { next(error); }

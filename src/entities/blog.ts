@@ -22,8 +22,8 @@ export class Blog {
   @Column({ type: "varchar", length: 255 })
   topic: string;
 
-  @Column({ type: "varchar", length: 255 })
-  featured_image: string;
+  @Column({ type: "varchar", length: 255, nullable: true })
+  featured_image: string | null;
 
   @Index()
   @Column({ type: "timestamptz" })

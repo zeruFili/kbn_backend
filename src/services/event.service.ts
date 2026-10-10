@@ -2,6 +2,7 @@ import { AppDataSource } from "../config/data-source";
 import { Event } from "../entities/event";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateEventDto, UpdateEventDto } from "../validators/event.dto";
+import { generateSlug } from "../utils/slug.utils";
 
 const repo = () => AppDataSource.getRepository(Event);
 
@@ -24,14 +25,17 @@ export class EventService {
   }
 
   async create(dto: CreateEventDto, adminId: string): Promise<Event> {
-    await ensureUnique(dto.title, dto.slug);
-    return repo().save(repo().create({ ...dto, created_by: adminId }));
+    const slug = generateSlug(dto.title);
+    await ensureUnique(dto.title, slug);
+    return repo().save(repo().create({ ...dto, slug, created_by: adminId }));
   }
 
   async update(id: string, dto: UpdateEventDto): Promise<Event> {
     const event = await this.findById(id);
-    await ensureUnique(dto.title ?? event.title, dto.slug ?? event.slug, id);
-    Object.assign(event, dto);
+    const title = dto.title ?? event.title;
+    const slug = dto.title !== undefined ? generateSlug(title) : event.slug;
+    await ensureUnique(title, slug, id);
+    Object.assign(event, dto, { slug });
     return repo().save(event);
   }
 

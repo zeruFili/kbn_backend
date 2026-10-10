@@ -2,6 +2,7 @@ import { AppDataSource } from "../config/data-source";
 import { Blog } from "../entities/blog";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateBlogDto, UpdateBlogDto } from "../validators/blog.dto";
+import { generateSlug } from "../utils/slug.utils";
 
 const repo = () => AppDataSource.getRepository(Blog);
 
@@ -24,14 +25,17 @@ export class BlogService {
   }
 
   async create(dto: CreateBlogDto, adminId: string): Promise<Blog> {
-    await ensureUnique(dto.title, dto.slug);
-    return repo().save(repo().create({ ...dto, author_id: adminId }));
+    const slug = generateSlug(dto.title);
+    await ensureUnique(dto.title, slug);
+    return repo().save(repo().create({ ...dto, slug, author_id: adminId }));
   }
 
   async update(id: string, dto: UpdateBlogDto): Promise<Blog> {
     const blog = await this.findById(id);
-    await ensureUnique(dto.title ?? blog.title, dto.slug ?? blog.slug, id);
-    Object.assign(blog, dto);
+    const title = dto.title ?? blog.title;
+    const slug = dto.title !== undefined ? generateSlug(title) : blog.slug;
+    await ensureUnique(title, slug, id);
+    Object.assign(blog, dto, { slug });
     return repo().save(blog);
   }
 

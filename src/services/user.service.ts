@@ -24,7 +24,7 @@ interface CreateUserInput {
   role: UserRole;
   phone?: string;
   is_active?: boolean;
-  createdBy: string;
+  createdBy?: string;
 }
 
 interface UpdateUserInput {

@@ -53,6 +53,6 @@ export class User {
   @UpdateDateColumn({ type: "timestamptz", nullable: true })
   updated_at: Date;
 
-  @Column({ type: "uuid" })
-  created_by: string;
+  @Column({ type: "uuid", nullable: true })
+  created_by?: string;
 }

@@ -18,9 +18,10 @@ router.get(
   (req, res, next) => userController.findById(req, res, next)
 );
 
+router.post("/", (req, res, next) => userController.create(req, res, next));
+
 router.use(authenticate, authorize(UserRole.Admin));
 
-router.post("/", (req, res, next) => userController.create(req, res, next));
 router.patch("/:id", (req, res, next) => userController.update(req, res, next));
 router.delete("/:id", (req, res, next) => userController.softDelete(req, res, next));
 

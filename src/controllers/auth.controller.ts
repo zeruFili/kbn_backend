@@ -19,6 +19,7 @@ export class AuthController {
       }
 
       const result = await authService.login(dto.email, dto.password);
+      console.log("Login successfgfffffffffffffful:", dto.email);
       res.status(200).json({ success: true, message: "Login successful", data: result });
     } catch (err) {
       if (err instanceof AppError) {

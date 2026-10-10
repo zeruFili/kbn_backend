@@ -3,7 +3,12 @@ import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
-import { CreateUserDto, UpdateUserDto } from "../validators/user.dto";
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  UpdateUserRoleDto,
+  UpdateUserStatusDto,
+} from "../validators/user.dto";
 import { UserRole } from "../enums/user-role.enum";
 import { userService } from "../services/user.service";
 
@@ -79,6 +84,46 @@ export class UserController {
 
       const user = await userService.update(id, dto, { id: req.user.id, role: req.user.role });
       res.status(200).json({ success: true, data: user, message: "User updated successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateRole(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const dto = await validateDto(UpdateUserRoleDto, req.body);
+
+      if (!req.user) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      const user = await userService.updateRole(id, dto.role, {
+        id: req.user.id,
+        role: req.user.role,
+      });
+      res.status(200).json({ success: true, data: user, message: "User role updated successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = req.params.id as string;
+      const dto = await validateDto(UpdateUserStatusDto, req.body);
+
+      if (!req.user) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      const user = await userService.updateStatus(id, dto.is_active, {
+        id: req.user.id,
+        role: req.user.role,
+      });
+      res.status(200).json({ success: true, data: user, message: "User status updated successfully" });
     } catch (error) {
       next(error);
     }

@@ -69,10 +69,6 @@ export class UpdateUserDto {
   email?: string;
 
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
-
-  @IsOptional()
   @IsString()
   @Matches(/^\+?[1-9]\d{1,14}$/, { message: "Invalid E.164 phone format" })
   phone?: string;
@@ -85,8 +81,14 @@ export class UpdateUserDto {
     message: "Password must include uppercase, lowercase, digit, and special character",
   })
   password?: string;
+}
 
-  @IsOptional()
+export class UpdateUserRoleDto {
+  @IsEnum(UserRole)
+  role: UserRole;
+}
+
+export class UpdateUserStatusDto {
   @IsBoolean()
-  is_active?: boolean;
+  is_active: boolean;
 }

@@ -30,10 +30,8 @@ interface CreateUserInput {
 interface UpdateUserInput {
   full_name?: string;
   email?: string;
-  role?: UserRole;
   phone?: string;
   password?: string;
-  is_active?: boolean;
 }
 
 interface CurrentUser {
@@ -141,16 +139,6 @@ export class UserService {
       throw new AppError(404, "User not found");
     }
 
-    const isSelf = id === currentUser.id;
-
-    if (dto.role !== undefined && isSelf) {
-      throw new AppError(403, "Cannot change your own role");
-    }
-
-    if (dto.is_active === false && isSelf) {
-      throw new AppError(403, "Cannot deactivate your own account");
-    }
-
     if (dto.email && dto.email !== user.email) {
       const existingEmail = await userRepo().findOne({ where: { email: dto.email } });
       if (existingEmail) {
@@ -163,10 +151,6 @@ export class UserService {
       user.full_name = dto.full_name;
     }
 
-    if (dto.role !== undefined) {
-      user.role = dto.role;
-    }
-
     if (dto.phone !== undefined) {
       user.phone = dto.phone;
     }
@@ -175,10 +159,48 @@ export class UserService {
       user.password_hash = await bcrypt.hash(dto.password, BCRYPT_COST);
     }
 
-    if (dto.is_active !== undefined) {
-      user.is_active = dto.is_active;
+    user.updated_at = new Date();
+
+    const saved = await userRepo().save(user);
+    return sanitizeUser(saved);
+  }
+
+  async updateRole(
+    id: string,
+    role: UserRole,
+    currentUser: CurrentUser
+  ): Promise<UserDetails> {
+    if (id === currentUser.id) {
+      throw new AppError(403, "Cannot change your own role");
     }
 
+    const user = await userRepo().findOne({ where: { id } });
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    user.role = role;
+    user.updated_at = new Date();
+
+    const saved = await userRepo().save(user);
+    return sanitizeUser(saved);
+  }
+
+  async updateStatus(
+    id: string,
+    is_active: boolean,
+    currentUser: CurrentUser
+  ): Promise<UserDetails> {
+    if (!is_active && id === currentUser.id) {
+      throw new AppError(403, "Cannot deactivate your own account");
+    }
+
+    const user = await userRepo().findOne({ where: { id } });
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    user.is_active = is_active;
     user.updated_at = new Date();
 
     const saved = await userRepo().save(user);

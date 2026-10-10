@@ -54,5 +54,5 @@ export class User {
   updated_at: Date;
 
   @Column({ type: "uuid", nullable: true })
-  created_by?: string;
+  created_by?: string; // can you remove this part 
 }

@@ -10,6 +10,7 @@ import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
 export class AuthController {
   async login(req: Request, res: Response): Promise<void> {
     try {
+      
       const dto = plainToInstance(LoginDto, req.body);
       const errors = await validate(dto);
       if (errors.length > 0) {

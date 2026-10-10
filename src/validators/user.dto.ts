@@ -1,8 +1,10 @@
 import {
-  IsString, IsEnum, IsOptional, IsEmail, IsBoolean, Length,
+  IsString, IsIn,IsEnum, IsOptional, IsEmail, IsBoolean, Length,
   MinLength, Matches, IsInt, Min, Max, IsUrl,
 } from "class-validator";
 import { UserRole } from "../enums/user-role.enum";
+
+
 
 export class CreateUserDto {
   @IsString()
@@ -16,17 +18,33 @@ export class CreateUserDto {
   @IsString()
   @MinLength(8)
   @Length(8, 128)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,128}$/, {
-    message: "Password must include uppercase, lowercase, digit, and special character",
-  })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,128}$/,
+    {
+      message:
+        "Password must include uppercase, lowercase, digit, and special character",
+    },
+  )
   password: string;
 
-  @IsEnum(UserRole)
+  @IsIn(
+    [
+      UserRole.Church,
+      UserRole.Company,
+      UserRole.User,
+      UserRole.Ministry,
+    ],
+    {
+      message: "Admin role cannot be assigned during user creation",
+    },
+  )
   role: UserRole;
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+?[1-9]\d{1,14}$/, { message: "Invalid E.164 phone format" })
+  @Matches(/^\+[1-9]\d{1,14}$/, {
+    message: "Invalid E.164 phone format",
+  })
   phone?: string;
 
   @IsOptional()
@@ -50,11 +68,7 @@ export class CreateUserDto {
   @IsBoolean()
   is_active?: boolean;
 
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(10)
-  rank?: number;
+  
 }
 
 export class UpdateUserDto {

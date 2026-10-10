@@ -3,6 +3,7 @@ import { Event } from "../entities/event";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateEventDto, UpdateEventDto } from "../validators/event.dto";
 import { generateSlug } from "../utils/slug.utils";
+import { deleteFile } from "../utils/upload.utils";
 
 const repo = () => AppDataSource.getRepository(Event);
 
@@ -32,16 +33,27 @@ export class EventService {
 
   async update(id: string, dto: UpdateEventDto): Promise<Event> {
     const event = await this.findById(id);
+    const previousImages = event.images ?? [];
     const title = dto.title ?? event.title;
     const slug = dto.title !== undefined ? generateSlug(title) : event.slug;
     await ensureUnique(title, slug, id);
     Object.assign(event, dto, { slug });
-    return repo().save(event);
+    const saved = await repo().save(event);
+    const currentImages = new Set(saved.images ?? []);
+    for (const image of previousImages) {
+      if (!currentImages.has(image)) {
+        deleteFile(image);
+      }
+    }
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
-    await this.findById(id);
+    const event = await this.findById(id);
     await repo().delete(id);
+    for (const image of event.images ?? []) {
+      deleteFile(image);
+    }
   }
 }
 

@@ -22,8 +22,8 @@ export class Event {
   type: string;
 
   // Up to 5 image URLs — stored as a Postgres text array
-  @Column({ type: "text", array: true, default: () => "'{}'" })
-  images: string[];
+  @Column({ type: "text", array: true, nullable: true, default: () => "'{}'" })
+  images: string[] | null;
 
   @Index()
   @Column({ type: "timestamptz" })

@@ -30,12 +30,24 @@ export function contentResourceId(req: Request): string {
   return id;
 }
 
-export function optionalStringArray(value: unknown): string[] | undefined {
+export function optionalStringArray(value: unknown): string[] | null | undefined {
+  if (value === null) {
+    return null;
+  }
+
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === "string");
   }
 
   if (typeof value === "string" && value.length > 0) {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item): item is string => typeof item === "string");
+      }
+    } catch {
+      // Treat a non-JSON string as a single form value.
+    }
     return [value];
   }
 

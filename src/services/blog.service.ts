@@ -3,6 +3,7 @@ import { Blog } from "../entities/blog";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateBlogDto, UpdateBlogDto } from "../validators/blog.dto";
 import { generateSlug } from "../utils/slug.utils";
+import { deleteFile } from "../utils/upload.utils";
 
 const repo = () => AppDataSource.getRepository(Blog);
 
@@ -32,16 +33,24 @@ export class BlogService {
 
   async update(id: string, dto: UpdateBlogDto): Promise<Blog> {
     const blog = await this.findById(id);
+    const previousImage = blog.featured_image;
     const title = dto.title ?? blog.title;
     const slug = dto.title !== undefined ? generateSlug(title) : blog.slug;
     await ensureUnique(title, slug, id);
     Object.assign(blog, dto, { slug });
-    return repo().save(blog);
+    const saved = await repo().save(blog);
+    if (previousImage && previousImage !== saved.featured_image) {
+      deleteFile(previousImage);
+    }
+    return saved;
   }
 
   async remove(id: string): Promise<void> {
-    await this.findById(id);
+    const blog = await this.findById(id);
     await repo().delete(id);
+    if (blog.featured_image) {
+      deleteFile(blog.featured_image);
+    }
   }
 }
 

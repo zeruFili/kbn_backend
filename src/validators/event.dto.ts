@@ -8,7 +8,7 @@ export class CreateEventDto {
   @IsString() @Length(1, 255) title: string;
   @IsString() @Length(1, 255) type: string;
   @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(5)
-  images?: string[];
+  images?: string[] | null;
   @Type(() => Date) @IsDate() start_date: Date;
   @IsEnum(Status) status: Status;
   @IsEnum(EventAvailability) availability: EventAvailability;
@@ -20,7 +20,7 @@ export class UpdateEventDto {
   @IsOptional() @IsString() @Length(1, 255) title?: string;
   @IsOptional() @IsString() @Length(1, 255) type?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) @ArrayMaxSize(5)
-  images?: string[];
+  images?: string[] | null;
   @IsOptional() @Type(() => Date) @IsDate() start_date?: Date;
   @IsOptional() @IsEnum(Status) status?: Status;
   @IsOptional() @IsEnum(EventAvailability) availability?: EventAvailability;

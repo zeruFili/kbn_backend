@@ -11,6 +11,12 @@ const paymentUploadMiddleware = createUploadFileMiddleware({
   subfolder: "payment",
 });
 
+router.get(
+  "/",
+  authenticate,
+  (req, res, next) => paymentController.list(req, res, next)
+);
+
 router.post(
   "/verify",
   authenticate,

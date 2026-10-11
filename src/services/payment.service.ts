@@ -5,6 +5,8 @@ import { URL } from "url";
 import { AppDataSource } from "../config/data-source";
 import { Payment } from "../entities/payment";
 import { PaymentStatus } from "../enums/payment-status.enum";
+import { UserRole } from "../enums/user-role.enum";
+import { AppError } from "../middlewares/error.middleware";
 import { deleteFile } from "../utils/upload.utils";
 
 type VerificationPayload = Record<string, unknown>;
@@ -42,6 +44,23 @@ export type VerifyPaymentResult =
     message: string;
     reason: string;
   };
+
+export interface PaymentListOptions {
+  page?: number;
+  limit?: number;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface PaginatedPayments {
+  data: Payment[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
 
 const repo = () => AppDataSource.getRepository(Payment);
 
@@ -138,6 +157,54 @@ function findPaymentDate(receipt: Record<string, unknown>): unknown {
 }
 
 export class PaymentService {
+  async findAll(
+    userId: string,
+    role: UserRole,
+    options: PaymentListOptions = {}
+  ): Promise<PaginatedPayments> {
+    const page = this.parsePositiveInteger(options.page, 1);
+    const limit = Math.min(this.parsePositiveInteger(options.limit, 20), 100);
+    const dateFrom = this.parseDateFilter(options.dateFrom, "date_from");
+    const dateTo = this.parseDateFilter(options.dateTo, "date_to");
+
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      throw new AppError(400, "date_from must be before or equal to date_to");
+    }
+
+    const query = repo().createQueryBuilder("payment");
+
+    if (role !== UserRole.Admin) {
+      query.andWhere("payment.user_id = :userId", { userId });
+    }
+
+    if (dateFrom) {
+      query.andWhere("payment.date >= :dateFrom", { dateFrom });
+    }
+
+    if (dateTo) {
+      const dateToExclusive = new Date(dateTo);
+      dateToExclusive.setUTCDate(dateToExclusive.getUTCDate() + 1);
+      query.andWhere("payment.date < :dateToExclusive", { dateToExclusive });
+    }
+
+    const [data, total] = await query
+      .orderBy("payment.date", "DESC")
+      .addOrderBy("payment.created_at", "DESC")
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   async verifyReceipt(userId: string, imagePath: string): Promise<VerifyPaymentResult> {
     const base64Image = this.readImageAsBase64(imagePath);
 
@@ -240,6 +307,24 @@ export class PaymentService {
     const fullPath = path.resolve(process.cwd(), cleanPath);
     const fileBuffer = fs.readFileSync(fullPath);
     return fileBuffer.toString("base64");
+  }
+
+  private parsePositiveInteger(value: number | undefined, fallback: number): number {
+    if (value === undefined) return fallback;
+    if (!Number.isInteger(value) || value < 1) {
+      throw new AppError(400, "page and limit must be positive integers");
+    }
+    return value;
+  }
+
+  private parseDateFilter(value: string | undefined, fieldName: string): Date | undefined {
+    if (!value) return undefined;
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError(400, `${fieldName} must be a valid date`);
+    }
+    return parsed;
   }
 
   private extractVerifiedData(payload: VerificationPayload): VerificationData | null {

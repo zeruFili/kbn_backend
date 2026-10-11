@@ -1,7 +1,9 @@
-import { NextFunction, Response } from "express";
+import { NextFunction, Request, Response } from "express";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
 import { paymentService } from "../services/payment.service";
+import { UpdatePaymentDto } from "../validators/payment.dto";
+import { contentResourceId, validateContentDto } from "../utils/content-controller.utils";
 import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
 
 export class PaymentController {
@@ -75,6 +77,32 @@ export class PaymentController {
       });
     } catch (error) {
       cleanupUploadedFiles(req);
+      next(error);
+    }
+  }
+
+  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const dto = await validateContentDto(UpdatePaymentDto, req.body);
+      const payment = await paymentService.update(contentResourceId(req), dto);
+      res.status(200).json({
+        success: true,
+        data: payment,
+        message: "Payment updated successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await paymentService.remove(contentResourceId(req));
+      res.status(200).json({
+        success: true,
+        message: "Payment deleted successfully",
+      });
+    } catch (error) {
       next(error);
     }
   }

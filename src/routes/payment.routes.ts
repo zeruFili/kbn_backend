@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../middlewares/auth.middleware";
+import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { UserRole } from "../enums/user-role.enum";
 import { paymentController } from "../controllers/payment.controller";
 import { createUploadFileMiddleware } from "../utils/upload.utils";
 
@@ -15,6 +16,20 @@ router.get(
   "/",
   authenticate,
   (req, res, next) => paymentController.list(req, res, next)
+);
+
+router.patch(
+  "/:id",
+  authenticate,
+  authorize(UserRole.Admin),
+  (req, res, next) => paymentController.update(req, res, next)
+);
+
+router.delete(
+  "/:id",
+  authenticate,
+  authorize(UserRole.Admin),
+  (req, res, next) => paymentController.remove(req, res, next)
 );
 
 router.post(

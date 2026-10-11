@@ -8,6 +8,7 @@ import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { deleteFile } from "../utils/upload.utils";
+import { UpdatePaymentDto } from "../validators/payment.dto";
 
 type VerificationPayload = Record<string, unknown>;
 
@@ -157,6 +158,41 @@ function findPaymentDate(receipt: Record<string, unknown>): unknown {
 }
 
 export class PaymentService {
+  async findById(id: string): Promise<Payment> {
+    const payment = await repo().findOne({ where: { id } });
+    if (!payment) throw new AppError(404, "Payment not found");
+    return payment;
+  }
+
+  async update(id: string, dto: UpdatePaymentDto): Promise<Payment> {
+    const payment = await this.findById(id);
+
+    if (dto.reference !== undefined && dto.reference !== null && dto.reference !== payment.reference) {
+      const duplicate = await repo().findOne({ where: { reference: dto.reference } });
+      if (duplicate && duplicate.id !== id) {
+        throw new AppError(409, "Payment reference already exists");
+      }
+    }
+
+    const previousImage = payment.image;
+    Object.assign(payment, dto);
+    const saved = await repo().save(payment);
+
+    if (previousImage && previousImage !== saved.image) {
+      deleteFile(previousImage);
+    }
+
+    return saved;
+  }
+
+  async remove(id: string): Promise<void> {
+    const payment = await this.findById(id);
+    await repo().delete(id);
+    if (payment.image) {
+      deleteFile(payment.image);
+    }
+  }
+
   async findAll(
     userId: string,
     role: UserRole,

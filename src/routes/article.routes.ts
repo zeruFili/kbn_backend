@@ -7,7 +7,7 @@ import { createUploadFileMiddleware } from "../utils/upload.utils";
 const router = Router();
 const articleUploadMiddleware = createUploadFileMiddleware({
   fieldName: "attachmentFiles",
-  maxCount: 1,
+  maxCount: 5,
   subfolder: "article",
 });
 

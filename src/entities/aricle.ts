@@ -22,8 +22,9 @@ export class Article {
   @Column({ type: "varchar", length: 255 })
   topic: string;
 
-  @Column({ type: "varchar", length: 255, nullable: true })
-  featured_image: string | null;
+  // Up to 5 image URLs — stored as a Postgres text array
+  @Column({ type: "text", array: true, nullable: true, default: () => "'{}'" })
+  featured_image: string[] | null;
 
   @Index()
   @Column({ type: "timestamptz" })

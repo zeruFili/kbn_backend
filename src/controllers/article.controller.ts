@@ -17,7 +17,7 @@ export class ArticleController {
       const uploadedFiles = getFilePathsFromRequest(req, "article");
       const dto = await validateContentDto(CreateArticleDto, {
         ...req.body,
-        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles } : {}),
       });
       res.status(201).json({ success: true, data: await articleService.create(dto, contentAdminId(req)), message: "Article created successfully" });
     } catch (error) {
@@ -30,7 +30,7 @@ export class ArticleController {
       const uploadedFiles = getFilePathsFromRequest(req, "article");
       const dto = await validateContentDto(UpdateArticleDto, {
         ...req.body,
-        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles } : {}),
       });
       res.status(200).json({ success: true, data: await articleService.update(contentResourceId(req), dto), message: "Article updated successfully" });
     } catch (error) {

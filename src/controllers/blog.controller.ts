@@ -17,7 +17,7 @@ export class BlogController {
       const uploadedFiles = getFilePathsFromRequest(req, "blog");
       const dto = await validateContentDto(CreateBlogDto, {
         ...req.body,
-        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles } : {}),
       });
       res.status(201).json({ success: true, data: await blogService.create(dto, contentAdminId(req)), message: "Blog created successfully" });
     } catch (error) {
@@ -30,7 +30,7 @@ export class BlogController {
       const uploadedFiles = getFilePathsFromRequest(req, "blog");
       const dto = await validateContentDto(UpdateBlogDto, {
         ...req.body,
-        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles[0] } : {}),
+        ...(uploadedFiles.length > 0 ? { featured_image: uploadedFiles } : {}),
       });
       res.status(200).json({ success: true, data: await blogService.update(contentResourceId(req), dto), message: "Blog updated successfully" });
     } catch (error) {

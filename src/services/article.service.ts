@@ -3,7 +3,7 @@ import { Article } from "../entities/aricle";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateArticleDto, UpdateArticleDto } from "../validators/article.dto";
 import { generateSlug } from "../utils/slug.utils";
-import { deleteFile } from "../utils/upload.utils";
+import { deleteFiles, syncAttachments } from "../utils/upload.utils";
 
 const repo = () => AppDataSource.getRepository(Article);
 
@@ -33,24 +33,20 @@ export class ArticleService {
 
   async update(id: string, dto: UpdateArticleDto): Promise<Article> {
     const article = await this.findById(id);
-    const previousImage = article.featured_image;
+    const previousImages = article.featured_image;
     const title = dto.title ?? article.title;
     const slug = dto.title !== undefined ? generateSlug(title) : article.slug;
     await ensureUnique(title, slug, id);
     Object.assign(article, dto, { slug });
     const saved = await repo().save(article);
-    if (previousImage && previousImage !== saved.featured_image) {
-      deleteFile(previousImage);
-    }
+    syncAttachments(previousImages, saved.featured_image);
     return saved;
   }
 
   async remove(id: string): Promise<void> {
     const article = await this.findById(id);
     await repo().delete(id);
-    if (article.featured_image) {
-      deleteFile(article.featured_image);
-    }
+    deleteFiles(article.featured_image ?? []);
   }
 }
 

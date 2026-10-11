@@ -4,7 +4,7 @@ import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 import { DataSource } from "typeorm";
 import { AppDataSource } from "./config/data-source";
@@ -15,6 +15,7 @@ import userRoutes from "./routes/user.routes";
 import blogRoutes from "./routes/blog.routes";
 import articleRoutes from "./routes/article.routes";
 import eventRoutes from "./routes/event.routes";
+import paymentRoutes from "./routes/payment.routes";
 
 import fileRoutes from "./routes/file.routes";
 
@@ -34,6 +35,7 @@ app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/blogs", blogRoutes);
 app.use("/api/v1/articles", articleRoutes);
 app.use("/api/v1/events", eventRoutes);
+app.use("/api/v1/payments", paymentRoutes);
 
 app.use("/api/v1/files", fileRoutes);
 

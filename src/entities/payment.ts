@@ -48,16 +48,19 @@ export class Payment {
   // Payment provider/gateway (e.g. "stripe", "paypal", "chapa", "telebirr")
   @Index()
   @Column({ type: "varchar", length: 50, nullable: true })
-  provider: string;
+  provider: string | null;
 
   // Provider transaction reference / external ID (e.g. Stripe charge id, tx ref)
   @Index()
   @Column({ type: "varchar", length: 255, nullable: true, unique: true })
-  reference: string;
+  reference: string | null;
 
   // URL to the payment page (for redirect-based flows) or receipt URL
   @Column({ type: "text", nullable: true })
-  url: string;
+  url: string | null;
+
+  @Column({ type: "text", nullable: true })
+  image: string | null;
 
   // ---------- Audit ----------
 

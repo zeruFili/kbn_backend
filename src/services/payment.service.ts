@@ -51,6 +51,10 @@ export interface PaymentListOptions {
   limit?: number;
   dateFrom?: string;
   dateTo?: string;
+  month?: number;
+  year?: number;
+  userName?: string;
+  status?: PaymentStatus;
 }
 
 export interface PaginatedPayments {
@@ -202,6 +206,9 @@ export class PaymentService {
     const limit = Math.min(this.parsePositiveInteger(options.limit, 20), 100);
     const dateFrom = this.parseDateFilter(options.dateFrom, "date_from");
     const dateTo = this.parseDateFilter(options.dateTo, "date_to");
+    const month = this.parseMonth(options.month);
+    const year = this.parseYear(options.year);
+    const status = this.parseStatus(options.status);
 
     if (dateFrom && dateTo && dateFrom > dateTo) {
       throw new AppError(400, "date_from must be before or equal to date_to");
@@ -211,6 +218,25 @@ export class PaymentService {
 
     if (role !== UserRole.Admin) {
       query.andWhere("payment.user_id = :userId", { userId });
+    }
+
+    if (options.userName?.trim()) {
+      query.innerJoin("payment.user", "user")
+        .andWhere("user.full_name ILIKE :userName", {
+          userName: `%${options.userName.trim()}%`,
+        });
+    }
+
+    if (status) {
+      query.andWhere("payment.status = :status", { status });
+    }
+
+    if (month !== undefined) {
+      query.andWhere("EXTRACT(MONTH FROM payment.date) = :month", { month });
+    }
+
+    if (year !== undefined) {
+      query.andWhere("EXTRACT(YEAR FROM payment.date) = :year", { year });
     }
 
     if (dateFrom) {
@@ -361,6 +387,30 @@ export class PaymentService {
       throw new AppError(400, `${fieldName} must be a valid date`);
     }
     return parsed;
+  }
+
+  private parseMonth(value: number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    if (!Number.isInteger(value) || value < 1 || value > 12) {
+      throw new AppError(400, "month must be an integer between 1 and 12");
+    }
+    return value;
+  }
+
+  private parseYear(value: number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    if (!Number.isInteger(value) || value < 1 || value > 9999) {
+      throw new AppError(400, "year must be a valid integer");
+    }
+    return value;
+  }
+
+  private parseStatus(value: PaymentStatus | undefined): PaymentStatus | undefined {
+    if (value === undefined) return undefined;
+    if (!Object.values(PaymentStatus).includes(value)) {
+      throw new AppError(400, "status must be accepted, rejected, or pending");
+    }
+    return value;
   }
 
   private extractVerifiedData(payload: VerificationPayload): VerificationData | null {

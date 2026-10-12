@@ -5,6 +5,7 @@ import { paymentService } from "../services/payment.service";
 import { UpdatePaymentDto } from "../validators/payment.dto";
 import { contentResourceId, validateContentDto } from "../utils/content-controller.utils";
 import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
+import { PaymentStatus } from "../enums/payment-status.enum";
 
 export class PaymentController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -21,12 +22,24 @@ export class PaymentController {
         : Number(req.query.limit);
       const dateFrom = req.query.date_from as string | undefined;
       const dateTo = req.query.date_to as string | undefined;
+      const month = req.query.month === undefined
+        ? undefined
+        : Number(req.query.month);
+      const year = req.query.year === undefined
+        ? undefined
+        : Number(req.query.year);
+      const userName = req.query.user_name as string | undefined;
+      const status = req.query.status as PaymentStatus | undefined;
 
       const result = await paymentService.findAll(req.user.id, req.user.role, {
         page,
         limit,
         dateFrom,
         dateTo,
+        month,
+        year,
+        userName,
+        status,
       });
 
       res.status(200).json({ success: true, ...result });

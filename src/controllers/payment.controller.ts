@@ -20,20 +20,43 @@ export class PaymentController {
       const limit = req.query.limit === undefined
         ? undefined
         : Number(req.query.limit);
-      const dateFrom = req.query.date_from as string | undefined;
-      const dateTo = req.query.date_to as string | undefined;
-      const month = req.query.month === undefined
+
+      const date = (
+        req.query.date ??
+        req.query.created_at ??
+        req.query.created_date ??
+        req.query.payment_date
+      ) as string | undefined;
+      const day = (req.query.day ?? req.query.payment_day) === undefined
         ? undefined
-        : Number(req.query.month);
-      const year = req.query.year === undefined
+        : Number(req.query.day ?? req.query.payment_day);
+      const dateFrom = (req.query.date_from ?? req.query.dateFrom ?? req.query.start_date ?? req.query.startDate) as string | undefined;
+      const dateTo = (req.query.date_to ?? req.query.dateTo ?? req.query.end_date ?? req.query.endDate) as string | undefined;
+
+      const monthRaw = req.query.month ?? req.query.monthe ?? req.query.payment_month;
+      const month = monthRaw === undefined
         ? undefined
-        : Number(req.query.year);
-      const userName = req.query.user_name as string | undefined;
-      const status = req.query.status as PaymentStatus | undefined;
+        : (typeof monthRaw === "string" && !isNaN(Number(monthRaw)) ? Number(monthRaw) : monthRaw as string);
+
+      const yearRaw = req.query.year ?? req.query.payment_year;
+      const year = yearRaw === undefined
+        ? undefined
+        : Number(yearRaw);
+
+      const userName = (
+        req.query.user_name ??
+        req.query.userName ??
+        req.query.name ??
+        req.query.user
+      ) as string | undefined;
+
+      const status = (req.query.status ?? req.query.payment_status) as PaymentStatus | PaymentStatus[] | string | string[] | undefined;
 
       const result = await paymentService.findAll(req.user.id, req.user.role, {
         page,
         limit,
+        date,
+        day,
         dateFrom,
         dateTo,
         month,

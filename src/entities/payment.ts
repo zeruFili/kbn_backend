@@ -64,6 +64,7 @@ export class Payment {
 
   // ---------- Audit ----------
 
+  @Index()
   @CreateDateColumn({ type: "timestamptz", default: () => "NOW()" })
   created_at: Date;
 

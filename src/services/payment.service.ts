@@ -49,12 +49,14 @@ export type VerifyPaymentResult =
 export interface PaymentListOptions {
   page?: number;
   limit?: number;
+  date?: string;
+  day?: number;
   dateFrom?: string;
   dateTo?: string;
-  month?: number;
+  month?: number | string;
   year?: number;
   userName?: string;
-  status?: PaymentStatus;
+  status?: PaymentStatus | PaymentStatus[] | string | string[];
 }
 
 export interface PaginatedPayments {
@@ -68,6 +70,68 @@ export interface PaginatedPayments {
 }
 
 const repo = () => AppDataSource.getRepository(Payment);
+
+const MONTH_NAMES: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function parseDateString(value: string): string | null {
+  const trimmed = value.trim();
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/);
+  if (ymdMatch) {
+    const [, year, month, day] = ymdMatch;
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+  }
+
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:[T\s].*)?$/);
+  if (dmyMatch) {
+    const [, day, month, year] = dmyMatch;
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+  }
+
+  const parsed = new Date(trimmed);
+  if (!Number.isNaN(parsed.getTime())) {
+    const y = parsed.getUTCFullYear();
+    const m = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(parsed.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -204,54 +268,67 @@ export class PaymentService {
   ): Promise<PaginatedPayments> {
     const page = this.parsePositiveInteger(options.page, 1);
     const limit = Math.min(this.parsePositiveInteger(options.limit, 20), 100);
+    const parsedDayParam = this.parseDay(options.day);
+    const { exactDate, day } = this.parseExactDateOrDay(options.date, parsedDayParam);
     const dateFrom = this.parseDateFilter(options.dateFrom, "date_from");
     const dateTo = this.parseDateFilter(options.dateTo, "date_to");
     const month = this.parseMonth(options.month);
     const year = this.parseYear(options.year);
-    const status = this.parseStatus(options.status);
+    const statuses = this.parseStatus(options.status);
 
     if (dateFrom && dateTo && dateFrom > dateTo) {
       throw new AppError(400, "date_from must be before or equal to date_to");
     }
 
-    const query = repo().createQueryBuilder("payment");
+    const query = repo().createQueryBuilder("payment")
+      .leftJoinAndSelect("payment.user", "user");
 
     if (role !== UserRole.Admin) {
       query.andWhere("payment.user_id = :userId", { userId });
     }
 
     if (options.userName?.trim()) {
-      query.innerJoin("payment.user", "user")
-        .andWhere("user.full_name ILIKE :userName", {
-          userName: `%${options.userName.trim()}%`,
-        });
+      query.andWhere("user.full_name ILIKE :userName", {
+        userName: `%${options.userName.trim()}%`,
+      });
     }
 
-    if (status) {
-      query.andWhere("payment.status = :status", { status });
+    if (statuses && statuses.length > 0) {
+      if (statuses.length === 1) {
+        query.andWhere("payment.status = :status", { status: statuses[0] });
+      } else {
+        query.andWhere("payment.status IN (:...statuses)", { statuses });
+      }
+    }
+
+    if (exactDate) {
+      query.andWhere("DATE(payment.created_at) = DATE(:exactDate)", { exactDate });
+    }
+
+    if (day !== undefined) {
+      query.andWhere("EXTRACT(DAY FROM payment.created_at) = :day", { day });
     }
 
     if (month !== undefined) {
-      query.andWhere("EXTRACT(MONTH FROM payment.date) = :month", { month });
+      query.andWhere("EXTRACT(MONTH FROM payment.created_at) = :month", { month });
     }
 
     if (year !== undefined) {
-      query.andWhere("EXTRACT(YEAR FROM payment.date) = :year", { year });
+      query.andWhere("EXTRACT(YEAR FROM payment.created_at) = :year", { year });
     }
 
     if (dateFrom) {
-      query.andWhere("payment.date >= :dateFrom", { dateFrom });
+      query.andWhere("payment.created_at >= :dateFrom", { dateFrom });
     }
 
     if (dateTo) {
       const dateToExclusive = new Date(dateTo);
       dateToExclusive.setUTCDate(dateToExclusive.getUTCDate() + 1);
-      query.andWhere("payment.date < :dateToExclusive", { dateToExclusive });
+      query.andWhere("payment.created_at < :dateToExclusive", { dateToExclusive });
     }
 
     const [data, total] = await query
-      .orderBy("payment.date", "DESC")
-      .addOrderBy("payment.created_at", "DESC")
+      .orderBy("payment.created_at", "DESC")
       .skip((page - 1) * limit)
       .take(limit)
       .getManyAndCount();
@@ -389,12 +466,67 @@ export class PaymentService {
     return parsed;
   }
 
-  private parseMonth(value: number | undefined): number | undefined {
+  private parseDay(value: number | undefined): number | undefined {
     if (value === undefined) return undefined;
-    if (!Number.isInteger(value) || value < 1 || value > 12) {
-      throw new AppError(400, "month must be an integer between 1 and 12");
+    if (!Number.isInteger(value) || value < 1 || value > 31) {
+      throw new AppError(400, "day must be an integer between 1 and 31");
     }
     return value;
+  }
+
+  private parseExactDateOrDay(
+    dateValue: string | undefined,
+    existingDay: number | undefined
+  ): { exactDate?: string; day?: number } {
+    if (!dateValue || !dateValue.trim()) {
+      return { day: existingDay };
+    }
+
+    const trimmed = dateValue.trim();
+
+    if (/^\d{1,2}$/.test(trimmed)) {
+      const dayNum = Number(trimmed);
+      if (dayNum >= 1 && dayNum <= 31) {
+        if (existingDay !== undefined && existingDay !== dayNum) {
+          throw new AppError(400, "Conflicting day values provided in date and day parameters");
+        }
+        return { day: dayNum };
+      }
+      throw new AppError(400, "date as day of month must be between 1 and 31");
+    }
+
+    const formatted = parseDateString(trimmed);
+    if (!formatted) {
+      throw new AppError(400, "date must be a valid date (e.g. YYYY-MM-DD) or day number (1-31)");
+    }
+
+    return { exactDate: formatted, day: existingDay };
+  }
+
+  private parseMonth(value: number | string | undefined): number | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+
+    if (typeof value === "number") {
+      if (!Number.isInteger(value) || value < 1 || value > 12) {
+        throw new AppError(400, "month must be an integer between 1 and 12");
+      }
+      return value;
+    }
+
+    const str = String(value).trim().toLowerCase();
+    const num = Number(str);
+    if (!Number.isNaN(num) && Number.isInteger(num)) {
+      if (num < 1 || num > 12) {
+        throw new AppError(400, "month must be an integer between 1 and 12");
+      }
+      return num;
+    }
+
+    if (MONTH_NAMES[str] !== undefined) {
+      return MONTH_NAMES[str];
+    }
+
+    throw new AppError(400, "month must be an integer between 1 and 12 or a valid month name");
   }
 
   private parseYear(value: number | undefined): number | undefined {
@@ -405,12 +537,53 @@ export class PaymentService {
     return value;
   }
 
-  private parseStatus(value: PaymentStatus | undefined): PaymentStatus | undefined {
-    if (value === undefined) return undefined;
-    if (!Object.values(PaymentStatus).includes(value)) {
-      throw new AppError(400, "status must be accepted, rejected, or pending");
+  private normalizeStatusValue(raw: string): PaymentStatus | null {
+    const clean = raw.trim().toLowerCase();
+    if (clean === "accepted" || clean === "accpeted" || clean === "accept") {
+      return PaymentStatus.ACCEPTED;
     }
-    return value;
+    if (clean === "rejected" || clean === "reject" || clean === "rejection") {
+      return PaymentStatus.REJECTED;
+    }
+    if (clean === "pending" || clean === "pend") {
+      return PaymentStatus.PENDING;
+    }
+    return null;
+  }
+
+  private parseStatus(
+    value: PaymentStatus | PaymentStatus[] | string | string[] | undefined
+  ): PaymentStatus[] | undefined {
+    if (value === undefined || value === null || value === "") return undefined;
+
+    let rawList: string[] = [];
+    if (Array.isArray(value)) {
+      rawList = value.map(String);
+    } else if (typeof value === "string") {
+      rawList = value.split(",").map((s) => s.trim()).filter(Boolean);
+    } else {
+      rawList = [String(value)];
+    }
+
+    if (rawList.length === 0) return undefined;
+
+    const parsedStatuses: PaymentStatus[] = [];
+    for (const raw of rawList) {
+      const clean = raw.trim().toLowerCase();
+      if (clean === "all") continue;
+      const normalized = this.normalizeStatusValue(raw);
+      if (!normalized) {
+        throw new AppError(
+          400,
+          `status must be accepted, rejected, or pending (received "${raw}")`
+        );
+      }
+      if (!parsedStatuses.includes(normalized)) {
+        parsedStatuses.push(normalized);
+      }
+    }
+
+    return parsedStatuses.length > 0 ? parsedStatuses : undefined;
   }
 
   private extractVerifiedData(payload: VerificationPayload): VerificationData | null {

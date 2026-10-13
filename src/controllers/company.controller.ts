@@ -24,6 +24,7 @@ import {
 function resolveCompanyFiles(req: Request): {
   logoPath?: string;
   licensePath?: string;
+  coverPath?: string;
 } {
   let logoPath =
     getUploadedFilePath(req, "company_logo", "companys") ||
@@ -36,6 +37,12 @@ function resolveCompanyFiles(req: Request): {
     getUploadedFilePath(req, "license", "companys") ||
     (typeof req.body.business_license === "string" ? req.body.business_license : undefined) ||
     (typeof req.body.license === "string" ? req.body.license : undefined);
+
+  let coverPath =
+    getUploadedFilePath(req, "cover_image", "companys") ||
+    getUploadedFilePath(req, "cover", "companys") ||
+    (typeof req.body.cover_image === "string" ? req.body.cover_image : undefined) ||
+    (typeof req.body.cover === "string" ? req.body.cover : undefined);
 
   const rawFiles = req.files as
     | Express.Multer.File[]
@@ -50,6 +57,8 @@ function resolveCompanyFiles(req: Request): {
         f.fieldname === "files" ||
         (f.fieldname !== "company_logo" &&
           f.fieldname !== "logo" &&
+          f.fieldname !== "cover_image" &&
+          f.fieldname !== "cover" &&
           f.fieldname !== "business_license" &&
           f.fieldname !== "license")
     );
@@ -70,34 +79,25 @@ function resolveCompanyFiles(req: Request): {
       mimetype.includes("document");
     const isImg = (mimetype: string) => mimetype.startsWith("image/");
 
-    if (!logoPath && !licensePath && attachmentFiles.length >= 2) {
-      const docFile = attachmentFiles.find((f) => isDoc(f.mimetype));
-      const imgFile = attachmentFiles.find((f) => isImg(f.mimetype));
-
-      if (docFile && imgFile) {
-        licensePath = `/${UPLOAD_DIR}/companys/${docFile.filename}`;
-        logoPath = `/${UPLOAD_DIR}/companys/${imgFile.filename}`;
-      } else {
-        logoPath = `/${UPLOAD_DIR}/companys/${attachmentFiles[0].filename}`;
-        licensePath = `/${UPLOAD_DIR}/companys/${attachmentFiles[1].filename}`;
-      }
-    } else {
-      for (const file of attachmentFiles) {
-        const filePath = `/${UPLOAD_DIR}/companys/${file.filename}`;
-        if (!licensePath && (isDoc(file.mimetype) || logoPath)) {
-          licensePath = filePath;
-        } else if (!logoPath && isImg(file.mimetype)) {
-          logoPath = filePath;
-        } else if (!licensePath) {
-          licensePath = filePath;
-        } else if (!logoPath) {
-          logoPath = filePath;
-        }
+    for (const file of attachmentFiles) {
+      const filePath = `/${UPLOAD_DIR}/companys/${file.filename}`;
+      if (!licensePath && isDoc(file.mimetype)) {
+        licensePath = filePath;
+      } else if (!logoPath && isImg(file.mimetype)) {
+        logoPath = filePath;
+      } else if (!coverPath && isImg(file.mimetype)) {
+        coverPath = filePath;
+      } else if (!licensePath) {
+        licensePath = filePath;
+      } else if (!logoPath) {
+        logoPath = filePath;
+      } else if (!coverPath) {
+        coverPath = filePath;
       }
     }
   }
 
-  return { logoPath, licensePath };
+  return { logoPath, licensePath, coverPath };
 }
 
 export class CompanyController {
@@ -216,7 +216,7 @@ export class CompanyController {
 
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { logoPath, licensePath } = resolveCompanyFiles(req);
+      const { logoPath, licensePath, coverPath } = resolveCompanyFiles(req);
 
       let socialMedia = req.body.social_media;
       if (typeof socialMedia === "string") {
@@ -243,6 +243,7 @@ export class CompanyController {
           ? { physical_address: req.body.address }
           : {}),
         ...(logoPath ? { company_logo: logoPath } : {}),
+        ...(coverPath ? { cover_image: coverPath } : {}),
         ...(licensePath ? { business_license: licensePath } : {}),
         ...(socialMedia !== undefined ? { social_media: socialMedia } : {}),
       };
@@ -264,13 +265,50 @@ export class CompanyController {
   async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = contentResourceId(req);
-      const { logoPath, licensePath } = resolveCompanyFiles(req);
+      const { logoPath, licensePath, coverPath } = resolveCompanyFiles(req);
 
       let socialMedia = req.body.social_media;
       if (typeof socialMedia === "string") {
         try {
           socialMedia = JSON.parse(socialMedia);
         } catch {}
+      }
+
+      // Check explicit removal flags or empty strings
+      const isLogoRemoved =
+        req.body.remove_company_logo === "true" ||
+        req.body.remove_company_logo === true ||
+        req.body.remove_logo === "true" ||
+        req.body.remove_logo === true ||
+        req.body.company_logo === "" ||
+        req.body.company_logo === "null" ||
+        req.body.company_logo === null;
+
+      const isCoverRemoved =
+        req.body.remove_cover_image === "true" ||
+        req.body.remove_cover_image === true ||
+        req.body.remove_cover === "true" ||
+        req.body.remove_cover === true ||
+        req.body.cover_image === "" ||
+        req.body.cover_image === "null" ||
+        req.body.cover_image === null;
+
+      let finalLogo: string | null | undefined = undefined;
+      if (logoPath) {
+        finalLogo = logoPath;
+      } else if (isLogoRemoved) {
+        finalLogo = null;
+      } else if (typeof req.body.company_logo === "string" && req.body.company_logo.trim()) {
+        finalLogo = req.body.company_logo.trim();
+      }
+
+      let finalCover: string | null | undefined = undefined;
+      if (coverPath) {
+        finalCover = coverPath;
+      } else if (isCoverRemoved) {
+        finalCover = null;
+      } else if (typeof req.body.cover_image === "string" && req.body.cover_image.trim()) {
+        finalCover = req.body.cover_image.trim();
       }
 
       const payload = {
@@ -290,10 +328,17 @@ export class CompanyController {
         ...(req.body.address && !req.body.physical_address
           ? { physical_address: req.body.address }
           : {}),
-        ...(logoPath ? { company_logo: logoPath } : {}),
+        ...(finalLogo !== undefined ? { company_logo: finalLogo } : {}),
+        ...(finalCover !== undefined ? { cover_image: finalCover } : {}),
         ...(licensePath ? { business_license: licensePath } : {}),
         ...(socialMedia !== undefined ? { social_media: socialMedia } : {}),
       };
+
+      // Strip non-DTO removal helper fields
+      delete (payload as Record<string, unknown>).remove_company_logo;
+      delete (payload as Record<string, unknown>).remove_logo;
+      delete (payload as Record<string, unknown>).remove_cover_image;
+      delete (payload as Record<string, unknown>).remove_cover;
 
       const dto = await validateContentDto(UpdateCompanyDto, payload);
       const company = await companyService.update(id, dto, req.user);

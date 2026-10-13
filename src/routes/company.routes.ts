@@ -10,6 +10,8 @@ const companyUploadMiddleware = createUploadFieldsMiddleware({
   fields: [
     { name: "attachmentFiles", maxCount: 5 },
     { name: "company_logo", maxCount: 1 },
+    { name: "cover_image", maxCount: 1 },
+    { name: "cover", maxCount: 1 },
     { name: "business_license", maxCount: 1 },
     { name: "logo", maxCount: 1 },
     { name: "license", maxCount: 1 },
@@ -62,6 +64,13 @@ router.post(
 
 // General updates
 router.patch(
+  "/:id",
+  authenticate,
+  companyUploadMiddleware,
+  (req, res, next) => companyController.update(req, res, next)
+);
+
+router.put(
   "/:id",
   authenticate,
   companyUploadMiddleware,

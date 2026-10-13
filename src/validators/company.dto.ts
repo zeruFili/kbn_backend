@@ -56,6 +56,11 @@ export class CreateCompanyDto {
   @Length(1, 255)
   company_logo?: string;
 
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  cover_image?: string;
+
   @IsString()
   description: string;
 
@@ -123,7 +128,12 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   @Length(1, 255)
-  company_logo?: string;
+  company_logo?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  cover_image?: string | null;
 
   @IsOptional()
   @IsString()

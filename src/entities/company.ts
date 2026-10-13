@@ -41,7 +41,10 @@ export class Company {
   physical_address: string;
 
   @Column({ type: "varchar", length: 255, nullable: true })
-  company_logo: string;
+  company_logo?: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  cover_image?: string | null;
 
   // ---------- Company Details ----------
 

@@ -217,6 +217,7 @@ export class CompanyService {
 
     const prevLogo = company.company_logo;
     const prevLicense = company.business_license;
+    const prevCover = company.cover_image;
 
     const { social_media, ...updateData } = dto;
     Object.assign(company, updateData);
@@ -229,6 +230,14 @@ export class CompanyService {
       prevLogo !== dto.company_logo
     ) {
       deleteFile(prevLogo);
+    }
+
+    if (
+      dto.cover_image !== undefined &&
+      prevCover &&
+      prevCover !== dto.cover_image
+    ) {
+      deleteFile(prevCover);
     }
 
     if (
@@ -303,6 +312,9 @@ export class CompanyService {
 
     if (company.company_logo) {
       deleteFile(company.company_logo);
+    }
+    if (company.cover_image) {
+      deleteFile(company.cover_image);
     }
     if (company.business_license) {
       deleteFile(company.business_license);

@@ -4,8 +4,10 @@ import path from "path";
 import { URL } from "url";
 import { AppDataSource } from "../config/data-source";
 import { Payment } from "../entities/payment";
+import { User } from "../entities/User";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { deleteFile } from "../utils/upload.utils";
 import { UpdatePaymentDto } from "../validators/payment.dto";
@@ -71,6 +73,7 @@ export interface PaginatedPayments {
 }
 
 const repo = () => AppDataSource.getRepository(Payment);
+const userRepo = () => AppDataSource.getRepository(User);
 
 const MONTH_NAMES: Record<string, number> = {
   jan: 1,
@@ -270,6 +273,10 @@ export class PaymentService {
       deleteFile(previousImage);
     }
 
+    if (saved.status === PaymentStatus.ACCEPTED) {
+      await this.activateUserOnSuccessfulPayment(saved.user_id);
+    }
+
     return saved;
   }
 
@@ -447,6 +454,8 @@ export class PaymentService {
         time: verifiedData.time,
         amount: verifiedData.amount,
       }));
+
+      await this.activateUserOnSuccessfulPayment(userId);
 
       return {
         verified: true,
@@ -713,6 +722,18 @@ export class PaymentService {
       req.write(requestBody);
       req.end();
     });
+  }
+
+  private async activateUserOnSuccessfulPayment(userId: string): Promise<void> {
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) return;
+
+    if (user.status !== UserStatus.SUSPENDED) {
+      user.status = UserStatus.ACTIVE;
+      user.is_active = true;
+      user.updated_at = new Date();
+      await userRepo().save(user);
+    }
   }
 }
 

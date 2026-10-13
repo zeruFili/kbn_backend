@@ -55,6 +55,7 @@ export interface PaymentListOptions {
   dateTo?: string;
   month?: number | string;
   year?: number;
+  userId?: string;
   userName?: string;
   status?: PaymentStatus | PaymentStatus[] | string | string[];
 }
@@ -226,9 +227,20 @@ function findPaymentDate(receipt: Record<string, unknown>): unknown {
 }
 
 export class PaymentService {
-  async findById(id: string): Promise<Payment> {
-    const payment = await repo().findOne({ where: { id } });
+  async findById(
+    id: string,
+    requester?: { id: string; role: UserRole }
+  ): Promise<Payment> {
+    const payment = await repo().findOne({
+      where: { id },
+      relations: ["user"],
+    });
     if (!payment) throw new AppError(404, "Payment not found");
+
+    if (requester && requester.role !== UserRole.Admin && payment.user_id !== requester.id) {
+      throw new AppError(403, "Forbidden: You can only access your own payment information");
+    }
+
     return payment;
   }
 
@@ -284,13 +296,21 @@ export class PaymentService {
       .leftJoinAndSelect("payment.user", "user");
 
     if (role !== UserRole.Admin) {
+      if (options.userId && options.userId.trim() !== userId) {
+        throw new AppError(403, "Forbidden: You can only access your own payment information");
+      }
       query.andWhere("payment.user_id = :userId", { userId });
-    }
-
-    if (options.userName?.trim()) {
-      query.andWhere("user.full_name ILIKE :userName", {
-        userName: `%${options.userName.trim()}%`,
-      });
+    } else {
+      if (options.userId?.trim()) {
+        query.andWhere("payment.user_id = :filterUserId", {
+          filterUserId: options.userId.trim(),
+        });
+      }
+      if (options.userName?.trim()) {
+        query.andWhere("user.full_name ILIKE :userName", {
+          userName: `%${options.userName.trim()}%`,
+        });
+      }
     }
 
     if (statuses && statuses.length > 0) {

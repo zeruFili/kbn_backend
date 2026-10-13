@@ -15,7 +15,40 @@ const paymentUploadMiddleware = createUploadFileMiddleware({
 router.get(
   "/",
   authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
   (req, res, next) => paymentController.list(req, res, next)
+);
+
+router.get(
+  "/user/:userId",
+  authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
+  (req, res, next) => paymentController.list(req, res, next)
+);
+
+router.get(
+  "/:id",
+  authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
+  (req, res, next) => paymentController.findById(req, res, next)
 );
 
 router.patch(
@@ -35,6 +68,13 @@ router.delete(
 router.post(
   "/verify",
   authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
   paymentUploadMiddleware,
   (req, res, next) => paymentController.verifyReceipt(req, res, next)
 );

@@ -43,6 +43,12 @@ export class PaymentController {
         ? undefined
         : Number(yearRaw);
 
+      const userId = (
+        req.params.userId ??
+        req.query.user_id ??
+        req.query.userId
+      ) as string | undefined;
+
       const userName = (
         req.query.user_name ??
         req.query.userName ??
@@ -61,11 +67,28 @@ export class PaymentController {
         dateTo,
         month,
         year,
+        userId,
         userName,
         status,
       });
 
       res.status(200).json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async findById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+
+      const payment = await paymentService.findById(contentResourceId(req), req.user);
+      res.status(200).json({
+        success: true,
+        data: payment,
+      });
     } catch (error) {
       next(error);
     }

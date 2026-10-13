@@ -158,6 +158,49 @@ export class AuthService {
     await resetTokenRepo().save(matchedToken);
   }
 
+  async register(data: {
+    full_name: string;
+    email: string;
+    password: string;
+    role?: UserRole;
+    phone?: string;
+    website?: string;
+  }): Promise<{
+    accessToken: string;
+    user: SafeUserOutput;
+  }> {
+    const existing = await userRepo().findOne({ where: { email: data.email } });
+    if (existing) {
+      throw new AppError(409, "Email already exists");
+    }
+
+    const password_hash = await bcrypt.hash(data.password, BCRYPT_COST);
+    const role = data.role ?? UserRole.User;
+
+    const user = userRepo().create({
+      full_name: data.full_name,
+      email: data.email,
+      password_hash,
+      role,
+      phone: (data.phone || undefined) as any,
+      website: data.website || undefined,
+      status: UserStatus.ACTIVE,
+      is_active: true,
+    });
+
+    const saved = await userRepo().save(user);
+
+    const accessToken = generateAccessToken({
+      id: saved.id,
+      role: saved.role,
+    });
+
+    return {
+      accessToken,
+      user: sanitizeUser(saved),
+    };
+  }
+
   async getMe(userId: string): Promise<UserDetails> {
     const user = await getUserDetails(userId);
     if (!user) {
@@ -167,5 +210,6 @@ export class AuthService {
     return user;
   }
 }
+
 
 export const authService = new AuthService();

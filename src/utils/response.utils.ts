@@ -4,6 +4,7 @@ import { UserStatus } from "../enums/user-status.enum";
 export interface SafeUserOutput {
   id: string;
   full_name: string;
+  email: string;
   role: string;
   status: UserStatus;
 }
@@ -24,10 +25,12 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
   return {
     id: user.id,
     full_name: user.full_name,
+    email: user.email,
     role: user.role,
     status: user.status,
   };
 }
+
 
 export function pickAdminUserFields(user: User | null | undefined): AdminUserOutput | null {
   if (!user) return null;

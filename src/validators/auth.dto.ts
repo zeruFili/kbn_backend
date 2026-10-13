@@ -1,4 +1,5 @@
-import { IsEmail, IsString, Length, Matches } from "class-validator";
+import { IsEmail, IsString, Length, Matches, IsOptional, IsIn } from "class-validator";
+import { UserRole } from "../enums/user-role.enum";
 
 export class LoginDto {
   @IsEmail()
@@ -24,3 +25,44 @@ export class ResetPasswordDto {
   @Length(8, 128)
   confirmPassword: string;
 }
+
+export class RegisterDto {
+  @IsString()
+  @Length(1, 255)
+  full_name: string;
+
+  @IsEmail()
+  @Length(1, 255)
+  email: string;
+
+  @IsString()
+  @Length(8, 128)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,128}$/, {
+    message: "Password must include uppercase, lowercase, digit, and special character",
+  })
+  password: string;
+
+  @IsOptional()
+  @IsIn([UserRole.Church, UserRole.Company, UserRole.User, UserRole.Ministry], {
+    message: "Admin role cannot be assigned during registration",
+  })
+  role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\+?[1-9]\d{1,14}$/, {
+    message: "Invalid phone number format",
+  })
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  business?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 255)
+  website?: string;
+}
+

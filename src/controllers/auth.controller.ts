@@ -4,10 +4,44 @@ import { plainToInstance } from "class-transformer";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
 import { authService } from "../services/auth.service";
-import { LoginDto, ForgotPasswordDto, ResetPasswordDto } from "../validators/auth.dto";
+import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../validators/auth.dto";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
 
 export class AuthController {
+  async register(req: Request, res: Response): Promise<void> {
+    try {
+      const body = {
+        ...req.body,
+        full_name: req.body.full_name || req.body.name,
+      };
+      const dto = plainToInstance(RegisterDto, body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await authService.register({
+        full_name: dto.full_name,
+        email: dto.email,
+        password: dto.password,
+        role: dto.role,
+        phone: dto.phone,
+        website: dto.website,
+      });
+
+      res.status(201).json({ success: true, message: "User registered successfully", data: result });
+    } catch (err) {
+      if (err instanceof AppError) {
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("Register error:", err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
   async login(req: Request, res: Response): Promise<void> {
     try {
       

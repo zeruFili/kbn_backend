@@ -23,11 +23,13 @@ const BCRYPT_COST = Number.isFinite(parsedBcryptCost) && parsedBcryptCost > 0 ? 
 function generateAccessToken(user: {
   id: string;
   role: string;
+  email?: string;
 }): string {
   return jwt.sign(
     {
       sub: user.id,
       role: user.role,
+      email: user.email,
     },
     JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_TTL }
@@ -80,6 +82,7 @@ export class AuthService {
     const accessToken = generateAccessToken({
       id: user.id,
       role: user.role,
+      email: user.email,
     });
 
     return {
@@ -193,6 +196,7 @@ export class AuthService {
     const accessToken = generateAccessToken({
       id: saved.id,
       role: saved.role,
+      email: saved.email,
     });
 
     return {

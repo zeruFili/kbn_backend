@@ -163,6 +163,27 @@ export class CompanyController {
     }
   }
 
+  async findMyCompanies(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+
+      const companies = await companyService.findAllByOwnerId(
+        req.user.id,
+        req.user.email
+      );
+
+      res.status(200).json({ success: true, data: companies });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async findMyCompany(
     req: AuthRequest,
     res: Response,
@@ -173,7 +194,12 @@ export class CompanyController {
         throw new AppError(401, "Unauthorized");
       }
 
-      const company = await companyService.findByOwnerId(req.user.id);
+      const companies = await companyService.findAllByOwnerId(
+        req.user.id,
+        req.user.email
+      );
+
+      const company = companies[0] || null;
       if (!company) {
         res.status(404).json({
           success: false,
@@ -182,7 +208,7 @@ export class CompanyController {
         return;
       }
 
-      res.status(200).json({ success: true, data: company });
+      res.status(200).json({ success: true, data: company, companies });
     } catch (error) {
       next(error);
     }

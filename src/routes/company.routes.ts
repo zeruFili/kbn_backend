@@ -31,6 +31,10 @@ router.get(
   (req, res, next) => companyController.findAll(req, res, next)
 );
 
+router.get("/my-companies", authenticate, (req, res, next) =>
+  companyController.findMyCompanies(req, res, next)
+);
+
 router.get("/my-company", authenticate, (req, res, next) =>
   companyController.findMyCompany(req, res, next)
 );

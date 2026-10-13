@@ -37,6 +37,7 @@ export interface PaginatedCompaniesResult {
 export interface CurrentUserContext {
   id: string;
   role: UserRole;
+  email?: string;
 }
 
 const repo = () => AppDataSource.getRepository(Company);
@@ -116,6 +117,21 @@ export class CompanyService {
       where: { created_by: userId },
       relations: ["business_category", "social_media"],
     });
+  }
+
+  async findAllByOwnerId(userId: string, userEmail?: string): Promise<Company[]> {
+    const qb = repo()
+      .createQueryBuilder("company")
+      .leftJoinAndSelect("company.business_category", "business_category")
+      .leftJoinAndSelect("company.social_media", "social_media")
+      .where("company.created_by = :userId", { userId });
+
+    if (userEmail) {
+      qb.orWhere("LOWER(company.email) = LOWER(:userEmail)", { userEmail });
+    }
+
+    qb.orderBy("company.created_at", "DESC");
+    return qb.getMany();
   }
 
   async create(dto: CreateCompanyDto, createdBy?: string): Promise<Company> {

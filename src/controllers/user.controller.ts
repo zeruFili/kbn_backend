@@ -10,6 +10,7 @@ import {
   UpdateUserStatusDto,
 } from "../validators/user.dto";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { userService } from "../services/user.service";
 
 async function validateDto<T extends object>(dtoClass: new () => T, plain: object): Promise<T> {
@@ -36,6 +37,7 @@ export class UserController {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
       const role = req.query.role as UserRole | undefined;
+      const status = req.query.status as UserStatus | undefined;
       const isActiveParam = req.query.is_active as string | undefined;
       const is_active = isActiveParam !== undefined ? isActiveParam === "true" : undefined;
       const search = req.query.search as string | undefined;
@@ -45,7 +47,12 @@ export class UserController {
         return;
       }
 
-      const result = await userService.findAll(page, limit, role, is_active, search);
+      if (status && !Object.values(UserStatus).includes(status)) {
+        res.status(400).json({ success: false, message: `Invalid status: ${status}` });
+        return;
+      }
+
+      const result = await userService.findAll(page, limit, role, is_active, search, status);
       res.status(200).json({ success: true, ...result });
     } catch (error) {
       next(error);
@@ -119,7 +126,10 @@ export class UserController {
         return;
       }
 
-      const user = await userService.updateStatus(id, dto.is_active, {
+      const user = await userService.updateStatus(id, {
+        status: dto.status,
+        is_active: dto.is_active,
+      }, {
         id: req.user.id,
         role: req.user.role,
       });

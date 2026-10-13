@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
 import { PasswordResetToken } from "../entities/PasswordResetToken";
+import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { pickSafeUserFields, SafeUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
@@ -59,7 +61,15 @@ export class AuthService {
       throw new AppError(401, "Invalid email or password");
     }
 
-    if (!user.is_active) {
+    if (user.status === UserStatus.PENDING) {
+      throw new AppError(403, "Account is pending approval. Contact your administrator.");
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new AppError(403, "Account is suspended. Contact your administrator.");
+    }
+
+    if (!user.is_active || user.status === UserStatus.INACTIVE) {
       throw new AppError(403, "Account is deactivated. Contact your administrator.");
     }
 

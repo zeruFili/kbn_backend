@@ -1,9 +1,11 @@
 import { User } from "../entities/User";
+import { UserStatus } from "../enums/user-status.enum";
 
 export interface SafeUserOutput {
   id: string;
   full_name: string;
   role: string;
+  status: UserStatus;
 }
 
 export interface AdminUserOutput {
@@ -13,6 +15,7 @@ export interface AdminUserOutput {
   role: string;
   phone: string | null;
   last_login_at: Date | null;
+  status: UserStatus;
   is_active: boolean;
 }
 
@@ -22,6 +25,7 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
     id: user.id,
     full_name: user.full_name,
     role: user.role,
+    status: user.status,
   };
 }
 
@@ -34,6 +38,7 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
     role: user.role,
     phone: user.phone ?? null,
     last_login_at: user.last_login_at ?? null,
+    status: user.status,
     is_active: user.is_active,
   };
 }

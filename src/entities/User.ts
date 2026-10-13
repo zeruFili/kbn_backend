@@ -3,6 +3,7 @@ import {
   Index, UpdateDateColumn,
 } from "typeorm";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 
 @Entity("user")
 export class User {
@@ -33,6 +34,14 @@ export class User {
 
   @Column({ type: "text", nullable: true })
   professional_experience: string;
+
+  @Index()
+  @Column({
+    type: "enum",
+    enum: UserStatus,
+    default: UserStatus.PENDING,
+  })
+  status: UserStatus;
 
   @Column({ type: "boolean", default: true })
   is_active: boolean;

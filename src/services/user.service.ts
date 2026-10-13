@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { pickAdminUserFields, AdminUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
@@ -23,6 +24,7 @@ interface CreateUserInput {
   password: string;
   role: UserRole;
   phone?: string;
+  status?: UserStatus;
   is_active?: boolean;
 }
 
@@ -31,6 +33,7 @@ interface UpdateUserInput {
   email?: string;
   phone?: string;
   password?: string;
+  status?: UserStatus;
 }
 
 interface CurrentUser {
@@ -47,6 +50,7 @@ function sanitizeUser(user: User): UserDetails {
     id: user.id,
     fullName: user.full_name,
     role: user.role,
+    status: user.status,
   };
 }
 
@@ -56,7 +60,8 @@ export class UserService {
     limit: number = 20,
     role?: UserRole,
     is_active?: boolean,
-    search?: string
+    search?: string,
+    status?: UserStatus
   ): Promise<PaginatedResult<AdminUserOutput>> {
     const p = Math.max(1, page);
     const l = Math.min(100, Math.max(1, limit));
@@ -67,6 +72,10 @@ export class UserService {
       where.is_active = true;
     } else if (is_active !== undefined) {
       where.is_active = is_active;
+    }
+
+    if (status) {
+      where.status = status;
     }
 
     const whereConditions: FindOptionsWhere<User>[] = [];
@@ -114,13 +123,19 @@ export class UserService {
 
     const password_hash = await bcrypt.hash(dto.password, BCRYPT_COST);
 
+    const status = dto.status ?? UserStatus.PENDING;
+    const is_active = dto.is_active !== undefined
+      ? dto.is_active
+      : status === UserStatus.ACTIVE;
+
     const user = userRepo().create({
       full_name: dto.full_name,
       email: dto.email,
       password_hash,
       role: dto.role,
       phone: (dto.phone || undefined) as any,
-      is_active: dto.is_active ?? true,
+      status,
+      is_active,
     });
 
     const saved = await userRepo().save(user);
@@ -151,6 +166,11 @@ export class UserService {
 
     if (dto.phone !== undefined) {
       user.phone = dto.phone;
+    }
+
+    if (dto.status !== undefined) {
+      user.status = dto.status;
+      user.is_active = dto.status === UserStatus.ACTIVE;
     }
 
     if (dto.password) {
@@ -186,19 +206,38 @@ export class UserService {
 
   async updateStatus(
     id: string,
-    is_active: boolean,
+    statusUpdate: { status?: UserStatus; is_active?: boolean } | boolean,
     currentUser: CurrentUser
   ): Promise<UserDetails> {
-    if (!is_active && id === currentUser.id) {
-      throw new AppError(403, "Cannot deactivate your own account");
-    }
-
     const user = await userRepo().findOne({ where: { id } });
     if (!user) {
       throw new AppError(404, "User not found");
     }
 
-    user.is_active = is_active;
+    let nextStatus: UserStatus = user.status;
+    let nextIsActive: boolean = user.is_active;
+
+    if (typeof statusUpdate === "boolean") {
+      nextIsActive = statusUpdate;
+      nextStatus = statusUpdate ? UserStatus.ACTIVE : UserStatus.INACTIVE;
+    } else {
+      if (statusUpdate.status !== undefined) {
+        nextStatus = statusUpdate.status;
+        nextIsActive = statusUpdate.is_active !== undefined
+          ? statusUpdate.is_active
+          : statusUpdate.status === UserStatus.ACTIVE;
+      } else if (statusUpdate.is_active !== undefined) {
+        nextIsActive = statusUpdate.is_active;
+        nextStatus = statusUpdate.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE;
+      }
+    }
+
+    if ((!nextIsActive || nextStatus === UserStatus.INACTIVE || nextStatus === UserStatus.SUSPENDED) && id === currentUser.id) {
+      throw new AppError(403, "Cannot deactivate or suspend your own account");
+    }
+
+    user.status = nextStatus;
+    user.is_active = nextIsActive;
     user.updated_at = new Date();
 
     const saved = await userRepo().save(user);
@@ -218,6 +257,7 @@ export class UserService {
       throw new AppError(404, "User not found");
     }
 
+    user.status = UserStatus.INACTIVE;
     user.is_active = false;
     user.updated_at = new Date();
     await userRepo().save(user);

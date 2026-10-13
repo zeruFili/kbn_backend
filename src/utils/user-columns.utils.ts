@@ -4,6 +4,7 @@ const SAFE_USER_COLUMNS = [
   "email",
   "phone",
   "role",
+  "status",
   "is_active",
   "last_login_at",
   "created_at",

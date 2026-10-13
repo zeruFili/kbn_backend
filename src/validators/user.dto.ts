@@ -3,6 +3,7 @@ import {
   MinLength, Matches, IsInt, Min, Max, IsUrl,
 } from "class-validator";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 
 
 
@@ -65,10 +66,12 @@ export class CreateUserDto {
   professional_experience?: string;
 
   @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
+
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
-
-  
 }
 
 export class UpdateUserDto {
@@ -81,6 +84,10 @@ export class UpdateUserDto {
   @IsEmail()
   @Length(1, 255)
   email?: string;
+
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 
   @IsOptional()
   @IsString()
@@ -103,6 +110,11 @@ export class UpdateUserRoleDto {
 }
 
 export class UpdateUserStatusDto {
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
+
+  @IsOptional()
   @IsBoolean()
-  is_active: boolean;
+  is_active?: boolean;
 }

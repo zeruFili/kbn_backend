@@ -6,6 +6,7 @@ import { UpdatePaymentDto } from "../validators/payment.dto";
 import { contentResourceId, validateContentDto } from "../utils/content-controller.utils";
 import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
 import { PaymentStatus } from "../enums/payment-status.enum";
+import { UserRole } from "../enums/user-role.enum";
 
 export class PaymentController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -140,10 +141,17 @@ export class PaymentController {
     }
   }
 
-  async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+      if (req.user.role !== UserRole.Admin) {
+        throw new AppError(403, "Forbidden: Only admins can update payment information");
+      }
+
       const dto = await validateContentDto(UpdatePaymentDto, req.body);
-      const payment = await paymentService.update(contentResourceId(req), dto);
+      const payment = await paymentService.update(contentResourceId(req), dto, req.user);
       res.status(200).json({
         success: true,
         data: payment,
@@ -154,9 +162,16 @@ export class PaymentController {
     }
   }
 
-  async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
+  async remove(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      await paymentService.remove(contentResourceId(req));
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+      if (req.user.role !== UserRole.Admin) {
+        throw new AppError(403, "Forbidden: Only admins can delete payment information");
+      }
+
+      await paymentService.remove(contentResourceId(req), req.user);
       res.status(200).json({
         success: true,
         message: "Payment deleted successfully",

@@ -244,7 +244,15 @@ export class PaymentService {
     return payment;
   }
 
-  async update(id: string, dto: UpdatePaymentDto): Promise<Payment> {
+  async update(
+    id: string,
+    dto: UpdatePaymentDto,
+    currentUser?: { id: string; role: UserRole }
+  ): Promise<Payment> {
+    if (currentUser && currentUser.role !== UserRole.Admin) {
+      throw new AppError(403, "Forbidden: Only admins can update payment information");
+    }
+
     const payment = await this.findById(id);
 
     if (dto.reference !== undefined && dto.reference !== null && dto.reference !== payment.reference) {
@@ -265,7 +273,14 @@ export class PaymentService {
     return saved;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(
+    id: string,
+    currentUser?: { id: string; role: UserRole }
+  ): Promise<void> {
+    if (currentUser && currentUser.role !== UserRole.Admin) {
+      throw new AppError(403, "Forbidden: Only admins can delete payment information");
+    }
+
     const payment = await this.findById(id);
     await repo().delete(id);
     if (payment.image) {

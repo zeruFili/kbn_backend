@@ -1,3 +1,8 @@
 export { UserRole } from "./user-role.enum";
 export { UserStatus } from "./user-status.enum";
+export { VerificationStatus } from "./verification-status.enum";
+export { SocialPlatform } from "./social-platform.enum";
+export { CategoryType } from "./category-type.enum";
+export { PaymentStatus } from "./payment-status.enum";
+export { Status as EventStatus } from "./event.enum";
 

@@ -1,7 +1,11 @@
 export { User } from "./User";
-
 export { PasswordResetToken } from "./PasswordResetToken";
 export { Blog } from "./blog";
 export { Article } from "./aricle";
 export { Event } from "./event";
 export { Payment } from "./payment";
+export { Category } from "./category";
+export { Company } from "./company";
+export { CompanySocialMedia } from "./company-social-media";
+export { UserSocialMedia } from "./user-social-media";
+export { PaymentWarning } from "./payment-warning";

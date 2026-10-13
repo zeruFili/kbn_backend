@@ -1,9 +1,10 @@
 import {
   Entity, PrimaryColumn, Column, CreateDateColumn,
-  Index, UpdateDateColumn, ManyToOne, JoinColumn,
+  Index, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany,
 } from "typeorm";
 import { Category } from "./category";
 import { VerificationStatus } from "../enums/verification-status.enum";
+import { CompanySocialMedia } from "./company-social-media";
 
 @Entity("company")
 export class Company {
@@ -61,6 +62,11 @@ export class Company {
 
   @Column({ type: "boolean", default: true })
   is_active: boolean;
+
+  // ---------- Social Media ----------
+
+  @OneToMany(() => CompanySocialMedia, (sm) => sm.company)
+  social_media: CompanySocialMedia[];
 
   // ---------- Audit ----------
 

@@ -15,7 +15,7 @@ export class CompanySocialMedia {
   @Column({ type: "uuid" })
   company_id: string;
 
-  @ManyToOne(() => Company, { onDelete: "CASCADE" })
+  @ManyToOne(() => Company, (company) => company.social_media, { onDelete: "CASCADE" })
   @JoinColumn({ name: "company_id" })
   company: Company;
 

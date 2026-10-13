@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
+export const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "10485760", 10);
 
 const ALLOWED_IMAGE_TYPES = new Set([
@@ -138,6 +138,118 @@ export function getFilePathsFromRequest(
   );
 }
 
+export interface UploadFieldOption {
+  name: string;
+  maxCount?: number;
+}
+
+export interface UploadFieldsMiddlewareOptions {
+  fields: UploadFieldOption[];
+  subfolder: string;
+  allowedTypes?: Set<string>;
+  fileSizeLimit?: number;
+}
+
+export function createUploadFieldsMiddleware(options: UploadFieldsMiddlewareOptions) {
+  const {
+    fields,
+    subfolder,
+    allowedTypes = ALLOWED_MIME_TYPES,
+    fileSizeLimit = MAX_FILE_SIZE,
+  } = options;
+
+  const totalMaxCount =
+    fields.reduce((sum, f) => sum + (f.maxCount || 1), 0) || 10;
+  const uploadDir = ensureUploadDir(subfolder);
+
+  const storage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, uploadDir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueFileName = generateUniqueFileName(file.originalname);
+      cb(null, uniqueFileName);
+    },
+  });
+
+  const upload = multer({
+    storage,
+    limits: { fileSize: fileSizeLimit },
+    fileFilter: (_req, file, cb) => {
+      if (allowedTypes.has(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`File type '${file.mimetype}' is not allowed`));
+      }
+    },
+  }).any();
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    upload(req, res, (err: any) => {
+      if (err instanceof multer.MulterError) {
+        cleanupUploadedFiles(req);
+        let errorMessage: string;
+        if (err.code === "LIMIT_FILE_SIZE") {
+          errorMessage = `File size exceeds the limit of ${Math.round(fileSizeLimit / 1048576)}MB`;
+        } else if (err.code === "LIMIT_FILE_COUNT") {
+          errorMessage = `Too many files. Maximum is ${totalMaxCount}`;
+        } else if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          errorMessage = `Unexpected file field: ${err.field || "unknown"}`;
+        } else {
+          errorMessage = err.message;
+        }
+        return res.status(400).json({
+          success: false,
+          message: errorMessage,
+        });
+      } else if (err) {
+        cleanupUploadedFiles(req);
+        return res.status(400).json({
+          success: false,
+          message: err.message,
+        });
+      }
+
+      if (
+        req.files &&
+        Array.isArray(req.files) &&
+        req.files.length > totalMaxCount
+      ) {
+        cleanupUploadedFiles(req);
+        return res.status(400).json({
+          success: false,
+          message: `Too many files. Maximum allowed is ${totalMaxCount}`,
+        });
+      }
+
+      next();
+    });
+  };
+}
+
+export function getUploadedFilePath(
+  req: Request,
+  fieldName: string,
+  subfolder: string
+): string | undefined {
+  if (req.file && req.file.fieldname === fieldName) {
+    return `/${UPLOAD_DIR}/${subfolder}/${req.file.filename}`;
+  }
+  const files = req.files as
+    | { [fieldname: string]: Express.Multer.File[] }
+    | Express.Multer.File[]
+    | undefined;
+  if (!files) return undefined;
+  if (Array.isArray(files)) {
+    const file = files.find((f) => f.fieldname === fieldName);
+    return file ? `/${UPLOAD_DIR}/${subfolder}/${file.filename}` : undefined;
+  }
+  if (typeof files === "object" && files[fieldName] && files[fieldName].length > 0) {
+    return `/${UPLOAD_DIR}/${subfolder}/${files[fieldName][0].filename}`;
+  }
+  return undefined;
+}
+
 export function getUploadsRoot(): string {
   return path.resolve(process.cwd(), UPLOAD_DIR);
 }
@@ -229,10 +341,28 @@ export function processUploadedFiles(
 }
 
 export function cleanupUploadedFiles(req: Request): void {
-  const files = req.files as Express.Multer.File[] | undefined;
-  if (!files || files.length === 0) return;
-  for (const file of files) {
-    try { fs.unlinkSync(file.path); } catch {}
+  if (req.file) {
+    try { fs.unlinkSync(req.file.path); } catch {}
+  }
+  const files = req.files as
+    | Express.Multer.File[]
+    | { [key: string]: Express.Multer.File[] }
+    | undefined;
+  if (!files) return;
+
+  if (Array.isArray(files)) {
+    for (const file of files) {
+      try { fs.unlinkSync(file.path); } catch {}
+    }
+  } else if (typeof files === "object") {
+    for (const key of Object.keys(files)) {
+      const fileList = files[key];
+      if (Array.isArray(fileList)) {
+        for (const file of fileList) {
+          try { fs.unlinkSync(file.path); } catch {}
+        }
+      }
+    }
   }
 }
 

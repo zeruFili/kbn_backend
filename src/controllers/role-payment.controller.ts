@@ -7,7 +7,7 @@ import {
   UpdateRolePaymentDto,
   UpdateRolePaymentStatusDto,
 } from "../validators/role-payment.dto";
-import { validateContentDto } from "../utils/content-controller.utils";
+import { validateContentDto, contentResourceId } from "../utils/content-controller.utils";
 import { UserRole } from "../enums/user-role.enum";
 import { RolePaymentStatus } from "../enums/role-payment-status.enum";
 
@@ -88,10 +88,7 @@ export class RolePaymentController {
 
   async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       const data = await rolePaymentService.findById(id);
       res.status(200).json({
         success: true,
@@ -104,14 +101,16 @@ export class RolePaymentController {
 
   async findByRole(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const roleParam = req.params.role?.trim().toLowerCase();
+      const rawRole = req.params.role;
+      const roleStr = typeof rawRole === "string" ? rawRole : Array.isArray(rawRole) ? rawRole[0] : "";
+      const roleParam = roleStr.trim().toLowerCase();
       const matched = Object.values(UserRole).find(
         (r) => r.toLowerCase() === roleParam
       );
       if (!matched) {
         throw new AppError(
           400,
-          `Invalid role: ${req.params.role}. Valid roles are: ${Object.values(UserRole).join(", ")}`
+          `Invalid role: ${roleStr}. Valid roles are: ${Object.values(UserRole).join(", ")}`
         );
       }
       const data = await rolePaymentService.findByRole(matched);
@@ -126,10 +125,7 @@ export class RolePaymentController {
 
   async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       const dto = await validateContentDto(UpdateRolePaymentDto, req.body);
       const data = await rolePaymentService.update(id, dto);
       res.status(200).json({
@@ -144,10 +140,7 @@ export class RolePaymentController {
 
   async updateStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       const dto = await validateContentDto(UpdateRolePaymentStatusDto, req.body);
       const data = await rolePaymentService.updateStatus(id, dto.status);
       res.status(200).json({
@@ -162,10 +155,7 @@ export class RolePaymentController {
 
   async activate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       const data = await rolePaymentService.activate(id);
       res.status(200).json({
         success: true,
@@ -179,10 +169,7 @@ export class RolePaymentController {
 
   async deactivate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       const data = await rolePaymentService.deactivate(id);
       res.status(200).json({
         success: true,
@@ -196,10 +183,7 @@ export class RolePaymentController {
 
   async remove(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { id } = req.params;
-      if (!id) {
-        throw new AppError(400, "Configuration ID is required");
-      }
+      const id = contentResourceId(req);
       await rolePaymentService.remove(id);
       res.status(200).json({
         success: true,

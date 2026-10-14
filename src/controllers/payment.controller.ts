@@ -44,18 +44,20 @@ export class PaymentController {
         ? undefined
         : Number(yearRaw);
 
-      const userId = (
+      const rawUserId = (
         req.params.userId ??
         req.query.user_id ??
         req.query.userId
-      ) as string | undefined;
+      );
+      const userId: string | undefined = typeof rawUserId === "string" ? rawUserId : Array.isArray(rawUserId) ? String(rawUserId[0]) : undefined;
 
-      const userName = (
+      const rawUserName = (
         req.query.user_name ??
         req.query.userName ??
         req.query.name ??
         req.query.user
-      ) as string | undefined;
+      );
+      const userName: string | undefined = typeof rawUserName === "string" ? rawUserName : Array.isArray(rawUserName) ? String(rawUserName[0]) : undefined;
 
       const status = (req.query.status ?? req.query.payment_status) as PaymentStatus | PaymentStatus[] | string | string[] | undefined;
 
@@ -202,7 +204,8 @@ export class PaymentController {
         throw new AppError(401, "Unauthorized");
       }
 
-      const targetUserId = req.params.userId || req.user.id;
+      const paramUserId = req.params.userId;
+      const targetUserId: string = (Array.isArray(paramUserId) ? paramUserId[0] : paramUserId) || req.user.id;
       const validity = await paymentService.getUserPaymentValidity(targetUserId, req.user);
 
       res.status(200).json({

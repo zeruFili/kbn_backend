@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
 import { VerificationStatus } from "../enums/verification-status.enum";
+import { CompanyStatus } from "../enums/company-status.enum";
 import { SocialPlatform } from "../enums/social-platform.enum";
 import { companyService } from "../services/company.service";
 import {
@@ -112,6 +113,7 @@ export class CompanyController {
       const verification_status = req.query.verification_status as
         | VerificationStatus
         | undefined;
+      const status = req.query.status as CompanyStatus | undefined;
       const isActiveParam = req.query.is_active as string | undefined;
       const is_active =
         isActiveParam !== undefined ? isActiveParam === "true" : undefined;
@@ -136,12 +138,21 @@ export class CompanyController {
         return;
       }
 
+      if (status && !Object.values(CompanyStatus).includes(status)) {
+        res.status(400).json({
+          success: false,
+          message: `Invalid status: ${status}`,
+        });
+        return;
+      }
+
       const result = await companyService.findAll({
         page,
         limit,
         search,
         business_category_id,
         verification_status,
+        status,
         is_active,
         sort_by,
         sort_order,
@@ -249,7 +260,7 @@ export class CompanyController {
       };
 
       const dto = await validateContentDto(CreateCompanyDto, payload);
-      const company = await companyService.create(dto, req.user?.id);
+      const company = await companyService.create(dto, req.user?.id, req.user);
 
       res.status(201).json({
         success: true,
@@ -390,7 +401,10 @@ export class CompanyController {
       const dto = await validateContentDto(UpdateCompanyStatusDto, req.body);
       const company = await companyService.updateStatus(
         id,
-        dto.is_active,
+        {
+          status: dto.status,
+          is_active: dto.is_active,
+        },
         req.user
       );
 

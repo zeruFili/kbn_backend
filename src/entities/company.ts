@@ -4,6 +4,7 @@ import {
 } from "typeorm";
 import { Category } from "./category";
 import { VerificationStatus } from "../enums/verification-status.enum";
+import { CompanyStatus } from "../enums/company-status.enum";
 import { CompanySocialMedia } from "./company-social-media";
 
 @Entity("company")
@@ -62,6 +63,14 @@ export class Company {
     default: VerificationStatus.PENDING,
   })
   verification_status: VerificationStatus;
+
+  @Index()
+  @Column({
+    type: "enum",
+    enum: CompanyStatus,
+    default: CompanyStatus.PENDING,
+  })
+  status: CompanyStatus;
 
   @Column({ type: "boolean", default: true })
   is_active: boolean;

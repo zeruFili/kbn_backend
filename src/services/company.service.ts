@@ -3,6 +3,7 @@ import { Company } from "../entities/company";
 import { CompanySocialMedia } from "../entities/company-social-media";
 import { Category } from "../entities/category";
 import { VerificationStatus } from "../enums/verification-status.enum";
+import { CompanyStatus } from "../enums/company-status.enum";
 import { SocialPlatform } from "../enums/social-platform.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { AppError } from "../middlewares/error.middleware";
@@ -19,6 +20,7 @@ export interface CompanyFilterOptions {
   search?: string;
   business_category_id?: string;
   verification_status?: VerificationStatus;
+  status?: CompanyStatus;
   is_active?: boolean;
   sort_by?: "created_at" | "company_name" | "updated_at";
   sort_order?: "ASC" | "DESC";
@@ -72,6 +74,12 @@ export class CompanyService {
     if (options.verification_status) {
       qb.andWhere("company.verification_status = :vStatus", {
         vStatus: options.verification_status,
+      });
+    }
+
+    if (options.status) {
+      qb.andWhere("company.status = :status", {
+        status: options.status,
       });
     }
 
@@ -134,7 +142,11 @@ export class CompanyService {
     return qb.getMany();
   }
 
-  async create(dto: CreateCompanyDto, createdBy?: string): Promise<Company> {
+  async create(
+    dto: CreateCompanyDto,
+    createdBy?: string,
+    currentUser?: CurrentUserContext
+  ): Promise<Company> {
     const category = await categoryRepo().findOne({
       where: { id: dto.business_category_id },
     });
@@ -149,9 +161,25 @@ export class CompanyService {
       throw new AppError(409, "A company with this email already exists");
     }
 
-    const { social_media, ...companyData } = dto;
+    const status = dto.status ?? CompanyStatus.PENDING;
+    const is_active =
+      dto.is_active !== undefined
+        ? dto.is_active
+        : status === CompanyStatus.ACTIVE;
+
+    if (
+      status === CompanyStatus.SUSPENDED &&
+      currentUser &&
+      currentUser.role !== UserRole.Admin
+    ) {
+      throw new AppError(403, "Only administrators can set company status to SUSPENDED");
+    }
+
+    const { social_media, status: _st, is_active: _ia, ...companyData } = dto;
     const company = repo().create({
       ...companyData,
+      status,
+      is_active,
       created_by: createdBy,
     });
 
@@ -215,11 +243,58 @@ export class CompanyService {
       throw new AppError(403, "Only administrators can update the verification status");
     }
 
+    if (dto.status !== undefined) {
+      if (
+        dto.status === CompanyStatus.SUSPENDED &&
+        currentUser &&
+        currentUser.role !== UserRole.Admin
+      ) {
+        throw new AppError(403, "Only administrators can suspend a company");
+      }
+      if (
+        company.status === CompanyStatus.SUSPENDED &&
+        dto.status !== CompanyStatus.SUSPENDED &&
+        currentUser &&
+        currentUser.role !== UserRole.Admin
+      ) {
+        throw new AppError(
+          403,
+          "Only administrators can update the status of a suspended company"
+        );
+      }
+    }
+
+    if (dto.is_active !== undefined) {
+      if (
+        company.status === CompanyStatus.SUSPENDED &&
+        currentUser &&
+        currentUser.role !== UserRole.Admin
+      ) {
+        throw new AppError(
+          403,
+          "Only administrators can reactivate a suspended company"
+        );
+      }
+    }
+
+    if (dto.status !== undefined) {
+      company.status = dto.status;
+      company.is_active =
+        dto.is_active !== undefined
+          ? dto.is_active
+          : dto.status === CompanyStatus.ACTIVE;
+    } else if (dto.is_active !== undefined) {
+      company.is_active = dto.is_active;
+      company.status = dto.is_active
+        ? CompanyStatus.ACTIVE
+        : CompanyStatus.INACTIVE;
+    }
+
     const prevLogo = company.company_logo;
     const prevLicense = company.business_license;
     const prevCover = company.cover_image;
 
-    const { social_media, ...updateData } = dto;
+    const { social_media, status: _st, is_active: _ia, ...updateData } = dto;
     Object.assign(company, updateData);
 
     const savedCompany = await repo().save(company);
@@ -278,7 +353,7 @@ export class CompanyService {
 
   async updateStatus(
     id: string,
-    isActive: boolean,
+    statusUpdate: { status?: CompanyStatus; is_active?: boolean } | boolean,
     currentUser?: CurrentUserContext
   ): Promise<Company> {
     const company = await this.findById(id);
@@ -294,7 +369,51 @@ export class CompanyService {
       );
     }
 
-    company.is_active = isActive;
+    let nextStatus: CompanyStatus = company.status;
+    let nextIsActive: boolean = company.is_active;
+
+    if (typeof statusUpdate === "boolean") {
+      nextIsActive = statusUpdate;
+      nextStatus = statusUpdate ? CompanyStatus.ACTIVE : CompanyStatus.INACTIVE;
+    } else {
+      if (statusUpdate.status !== undefined) {
+        nextStatus = statusUpdate.status;
+        nextIsActive =
+          statusUpdate.is_active !== undefined
+            ? statusUpdate.is_active
+            : statusUpdate.status === CompanyStatus.ACTIVE;
+      } else if (statusUpdate.is_active !== undefined) {
+        nextIsActive = statusUpdate.is_active;
+        nextStatus = statusUpdate.is_active
+          ? CompanyStatus.ACTIVE
+          : CompanyStatus.INACTIVE;
+      }
+    }
+
+    if (
+      nextStatus === CompanyStatus.SUSPENDED &&
+      currentUser &&
+      currentUser.role !== UserRole.Admin
+    ) {
+      throw new AppError(403, "Only administrators can suspend a company");
+    }
+
+    if (
+      company.status === CompanyStatus.SUSPENDED &&
+      nextStatus !== CompanyStatus.SUSPENDED &&
+      currentUser &&
+      currentUser.role !== UserRole.Admin
+    ) {
+      throw new AppError(
+        403,
+        "Only administrators can change status of a suspended company"
+      );
+    }
+
+    company.status = nextStatus;
+    company.is_active = nextIsActive;
+    company.updated_at = new Date();
+
     await repo().save(company);
     return this.findById(id);
   }

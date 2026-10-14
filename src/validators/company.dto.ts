@@ -11,6 +11,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { VerificationStatus } from "../enums/verification-status.enum";
+import { CompanyStatus } from "../enums/company-status.enum";
 import { SocialPlatform } from "../enums/social-platform.enum";
 
 export class CompanySocialMediaDto {
@@ -71,6 +72,10 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsEnum(VerificationStatus)
   verification_status?: VerificationStatus;
+
+  @IsOptional()
+  @IsEnum(CompanyStatus)
+  status?: CompanyStatus;
 
   @IsOptional()
   @Transform(({ value }) =>
@@ -149,6 +154,10 @@ export class UpdateCompanyDto {
   verification_status?: VerificationStatus;
 
   @IsOptional()
+  @IsEnum(CompanyStatus)
+  status?: CompanyStatus;
+
+  @IsOptional()
   @Transform(({ value }) =>
     value === "true" || value === true
       ? true
@@ -172,6 +181,11 @@ export class UpdateCompanyVerificationStatusDto {
 }
 
 export class UpdateCompanyStatusDto {
+  @IsOptional()
+  @IsEnum(CompanyStatus)
+  status?: CompanyStatus;
+
+  @IsOptional()
   @Transform(({ value }) =>
     value === "true" || value === true
       ? true
@@ -180,5 +194,5 @@ export class UpdateCompanyStatusDto {
       : value
   )
   @IsBoolean()
-  is_active: boolean;
+  is_active?: boolean;
 }

@@ -3,7 +3,6 @@ import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
-import { TelegramError } from "../types/telegram.types";
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -167,31 +166,7 @@ export class UserController {
       next(error);
     }
   }
-
-  async sendTelegram(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const { message } = req.body || {};
-
-      if (!message || typeof message !== "string" || !message.trim()) {
-        res.status(422).json({
-          status: "error",
-          code: "EMPTY_MESSAGE",
-          error: "Message cannot be empty",
-        });
-        return;
-      }
-
-      const result = await userService.sendTelegramMessage(id, message);
-      res.status(200).json(result);
-    } catch (error: any) {
-      if (error instanceof TelegramError) {
-        res.status(error.statusCode).json(error.toResponse());
-        return;
-      }
-      next(error);
-    }
-  }
 }
+
 
 export const userController = new UserController();

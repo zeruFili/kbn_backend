@@ -7,8 +7,6 @@ import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { pickAdminUserFields, AdminUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
-import { telegramService } from "./telegram.service";
-import { TelegramSendResult } from "../types/telegram.types";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -276,17 +274,6 @@ export class UserService {
     user.is_active = false;
     user.updated_at = new Date();
     await userRepo().save(user);
-  }
-
-  /**
-   * Sends a Telegram message to a user by user ID
-   */
-  async sendTelegramMessage(userId: string, message: string): Promise<TelegramSendResult> {
-    const user = await userRepo().findOne({ where: { id: userId } });
-    if (!user) {
-      throw new AppError(404, "User not found");
-    }
-    return telegramService.sendToUser(user, message);
   }
 }
 

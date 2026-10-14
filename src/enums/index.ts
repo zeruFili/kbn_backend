@@ -6,4 +6,4 @@ export { CategoryType } from "./category-type.enum";
 export { PaymentStatus } from "./payment-status.enum";
 export { Status as EventStatus } from "./event.enum";
 export { CompanyStatus } from "./company-status.enum";
-
+export { RolePaymentStatus } from "./role-payment-status.enum";

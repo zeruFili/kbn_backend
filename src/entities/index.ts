@@ -9,3 +9,4 @@ export { Company } from "./company";
 export { CompanySocialMedia } from "./company-social-media";
 export { UserSocialMedia } from "./user-social-media";
 export { PaymentWarning } from "./payment-warning";
+export { RolePayment } from "./role-payment";

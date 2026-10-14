@@ -1,35 +1,37 @@
 import assert from "node:assert";
-import { telegramSenderService } from "../services/telegram-sender.service";
-import { telegramService } from "../services/telegram.service";
-import { TelegramError } from "../types/telegram.types";
+import {
+  sendTelegramMessage,
+  telegramSender,
+  TelegramError,
+} from "../modules/telegram";
 
 async function runTelegramTests() {
-  console.log("Running Telegram Message Sender unit & integration tests...\n");
+  console.log("Running Standalone Telegram Module tests...\n");
 
   // -------------------------------------------------------------
   // Test 1: Phone number normalization
   // -------------------------------------------------------------
   console.log("Test 1: Phone normalization...");
   assert.strictEqual(
-    telegramSenderService.normalizePhone("+1234567890"),
+    telegramSender.normalizePhone("+1234567890"),
     "+1234567890"
   );
   assert.strictEqual(
-    telegramSenderService.normalizePhone("1234567890"),
+    telegramSender.normalizePhone("1234567890"),
     "+1234567890"
   );
   assert.strictEqual(
-    telegramSenderService.normalizePhone("+1 (555) 234-5678"),
+    telegramSender.normalizePhone("+1 (555) 234-5678"),
     "+15552345678"
   );
   assert.strictEqual(
-    telegramSenderService.normalizePhone("  +251-91-123-4567  "),
+    telegramSender.normalizePhone("  +251-91-123-4567  "),
     "+251911234567"
   );
-  assert.strictEqual(telegramSenderService.normalizePhone("not-a-phone"), null);
-  assert.strictEqual(telegramSenderService.normalizePhone("123"), null);
-  assert.strictEqual(telegramSenderService.normalizePhone(null as any), null);
-  assert.strictEqual(telegramSenderService.normalizePhone(undefined as any), null);
+  assert.strictEqual(telegramSender.normalizePhone("not-a-phone"), null);
+  assert.strictEqual(telegramSender.normalizePhone("123"), null);
+  assert.strictEqual(telegramSender.normalizePhone(null as any), null);
+  assert.strictEqual(telegramSender.normalizePhone(undefined as any), null);
   console.log("✅ Phone normalization passed.");
 
   // -------------------------------------------------------------
@@ -79,11 +81,11 @@ async function runTelegramTests() {
   console.log("✅ TelegramError serialization passed.");
 
   // -------------------------------------------------------------
-  // Test 3: Input validation in telegramService / telegramSenderService
+  // Test 3: Standalone calling function input validation
   // -------------------------------------------------------------
   console.log("Test 3: Input validation...");
   try {
-    await telegramService.sendMessage("+1234567890", "   ");
+    await sendTelegramMessage("+1234567890", "   ");
     assert.fail("Should have rejected empty message");
   } catch (err: any) {
     assert.strictEqual(err.code, "EMPTY_MESSAGE");
@@ -91,11 +93,8 @@ async function runTelegramTests() {
   }
 
   try {
-    await telegramService.sendToUser(
-      { full_name: "Test User", phone: null },
-      "Hello"
-    );
-    assert.fail("Should have rejected user without phone");
+    await sendTelegramMessage("", "Hello");
+    assert.fail("Should have rejected empty phone");
   } catch (err: any) {
     assert.strictEqual(err.code, "INVALID_PHONE_FORMAT");
     assert.strictEqual(err.statusCode, 422);
@@ -142,14 +141,11 @@ async function runTelegramTests() {
   };
 
   // Mock getClient on service
-  const origGetClient = telegramSenderService.getClient;
-  (telegramSenderService as any).getClient = async () => mockClient;
+  const origGetClient = telegramSender.getClient;
+  (telegramSender as any).getClient = async () => mockClient;
 
   try {
-    const result = await telegramSenderService.send({
-      phone: "+15551234567",
-      message: "Hello from test!",
-    });
+    const result = await sendTelegramMessage("+15551234567", "Hello from test!");
 
     assert.strictEqual(result.status, "sent");
     assert.strictEqual(result.registered, true);
@@ -176,13 +172,10 @@ async function runTelegramTests() {
         return null;
       },
     };
-    (telegramSenderService as any).getClient = async () => mockUnregisteredClient;
+    (telegramSender as any).getClient = async () => mockUnregisteredClient;
 
     try {
-      await telegramSenderService.send({
-        phone: "+15550000000",
-        message: "Hello",
-      });
+      await sendTelegramMessage("+15550000000", "Hello");
       assert.fail("Should have thrown PHONE_NOT_REGISTERED");
     } catch (err: any) {
       assert.strictEqual(err.code, "PHONE_NOT_REGISTERED");
@@ -206,13 +199,10 @@ async function runTelegramTests() {
         throw floodErr;
       },
     };
-    (telegramSenderService as any).getClient = async () => mockRateLimitedClient;
+    (telegramSender as any).getClient = async () => mockRateLimitedClient;
 
     try {
-      await telegramSenderService.send({
-        phone: "+15551112222",
-        message: "Spam check",
-      });
+      await sendTelegramMessage("+15551112222", "Spam check");
       assert.fail("Should have thrown RATE_LIMITED");
     } catch (err: any) {
       assert.strictEqual(err.code, "RATE_LIMITED");
@@ -221,12 +211,11 @@ async function runTelegramTests() {
     }
     console.log("✅ Rate limit handling passed.");
   } finally {
-    // Restore original getClient
-    (telegramSenderService as any).getClient = origGetClient;
+    (telegramSender as any).getClient = origGetClient;
   }
 
   console.log("\n==========================================");
-  console.log("🎉 ALL TELEGRAM SENDER TESTS PASSED!");
+  console.log("🎉 ALL STANDALONE TELEGRAM TESTS PASSED!");
   console.log("==========================================\n");
 }
 

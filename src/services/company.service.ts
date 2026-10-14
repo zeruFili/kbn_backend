@@ -37,8 +37,8 @@ export interface PaginatedCompaniesResult {
 }
 
 export interface CurrentUserContext {
-  id: string;
-  role: UserRole;
+  id?: string;
+  role?: UserRole;
   email?: string;
 }
 
@@ -47,7 +47,10 @@ const categoryRepo = () => AppDataSource.getRepository(Category);
 const socialMediaRepo = () => AppDataSource.getRepository(CompanySocialMedia);
 
 export class CompanyService {
-  async findAll(options: CompanyFilterOptions = {}): Promise<PaginatedCompaniesResult> {
+  async findAll(
+    options: CompanyFilterOptions = {},
+    currentUser?: CurrentUserContext
+  ): Promise<PaginatedCompaniesResult> {
     const page = options.page && options.page > 0 ? options.page : 1;
     const limit = options.limit && options.limit > 0 ? options.limit : 20;
     const sortBy = options.sort_by || "created_at";
@@ -57,6 +60,30 @@ export class CompanyService {
       .createQueryBuilder("company")
       .leftJoinAndSelect("company.business_category", "business_category")
       .leftJoinAndSelect("company.social_media", "social_media");
+
+    const isAdmin = currentUser?.role === UserRole.Admin;
+
+    if (!isAdmin) {
+      // Non-admin users can ONLY retrieve active companies
+      // Even when attaching a status or is_active param, non-admin users only get active companies (is_active: true, status: ACTIVE)
+      qb.andWhere("company.status = :activeStatus", {
+        activeStatus: CompanyStatus.ACTIVE,
+      });
+      qb.andWhere("company.is_active = :isActive", { isActive: true });
+    } else {
+      // Admin users can retrieve companies regardless of their status
+      if (options.status) {
+        qb.andWhere("company.status = :status", {
+          status: options.status,
+        });
+      }
+
+      if (options.is_active !== undefined) {
+        qb.andWhere("company.is_active = :isActive", {
+          isActive: options.is_active,
+        });
+      }
+    }
 
     if (options.search) {
       qb.andWhere(
@@ -74,18 +101,6 @@ export class CompanyService {
     if (options.verification_status) {
       qb.andWhere("company.verification_status = :vStatus", {
         vStatus: options.verification_status,
-      });
-    }
-
-    if (options.status) {
-      qb.andWhere("company.status = :status", {
-        status: options.status,
-      });
-    }
-
-    if (options.is_active !== undefined) {
-      qb.andWhere("company.is_active = :isActive", {
-        isActive: options.is_active,
       });
     }
 

@@ -146,17 +146,25 @@ export class CompanyController {
         return;
       }
 
-      const result = await companyService.findAll({
-        page,
-        limit,
-        search,
-        business_category_id,
-        verification_status,
-        status,
-        is_active,
-        sort_by,
-        sort_order,
-      });
+      const authReq = req as AuthRequest;
+      const currentUser = authReq.user
+        ? { id: authReq.user.id, role: authReq.user.role, email: authReq.user.email }
+        : undefined;
+
+      const result = await companyService.findAll(
+        {
+          page,
+          limit,
+          search,
+          business_category_id,
+          verification_status,
+          status,
+          is_active,
+          sort_by,
+          sort_order,
+        },
+        currentUser
+      );
 
       res.status(200).json({ success: true, ...result });
     } catch (error) {

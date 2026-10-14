@@ -36,9 +36,9 @@ interface UpdateUserInput {
   status?: UserStatus;
 }
 
-interface CurrentUser {
-  id: string;
-  role: UserRole;
+export interface CurrentUser {
+  id?: string;
+  role?: UserRole;
 }
 
 const userRepo = () => AppDataSource.getRepository(User);
@@ -61,21 +61,34 @@ export class UserService {
     role?: UserRole,
     is_active?: boolean,
     search?: string,
-    status?: UserStatus
+    status?: UserStatus,
+    currentUser?: CurrentUser
   ): Promise<PaginatedResult<AdminUserOutput>> {
     const p = Math.max(1, page);
     const l = Math.min(100, Math.max(1, limit));
     const where: FindOptionsWhere<User> = {};
 
-    if (role) {
-      where.role = role;
-      where.is_active = true;
-    } else if (is_active !== undefined) {
-      where.is_active = is_active;
-    }
+    const isAdmin = currentUser?.role === UserRole.Admin;
 
-    if (status) {
-      where.status = status;
+    if (!isAdmin) {
+      // Non-admin users can ONLY retrieve active users
+      // Even when attaching a status or is_active param, non-admin users only get active users (is_active: true, status: ACTIVE)
+      where.status = UserStatus.ACTIVE;
+      where.is_active = true;
+      if (role) {
+        where.role = role;
+      }
+    } else {
+      // Admin users can retrieve users regardless of their status
+      if (role) {
+        where.role = role;
+      }
+      if (is_active !== undefined) {
+        where.is_active = is_active;
+      }
+      if (status) {
+        where.status = status;
+      }
     }
 
     const whereConditions: FindOptionsWhere<User>[] = [];

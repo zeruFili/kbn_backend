@@ -52,7 +52,19 @@ export class UserController {
         return;
       }
 
-      const result = await userService.findAll(page, limit, role, is_active, search, status);
+      const currentUser = req.user
+        ? { id: req.user.id, role: req.user.role }
+        : undefined;
+
+      const result = await userService.findAll(
+        page,
+        limit,
+        role,
+        is_active,
+        search,
+        status,
+        currentUser
+      );
       res.status(200).json({ success: true, ...result });
     } catch (error) {
       next(error);

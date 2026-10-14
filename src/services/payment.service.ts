@@ -5,12 +5,14 @@ import { URL } from "url";
 import { AppDataSource } from "../config/data-source";
 import { Payment } from "../entities/payment";
 import { User } from "../entities/User";
+import { RolePayment } from "../entities/role-payment";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { deleteFile } from "../utils/upload.utils";
 import { UpdatePaymentDto } from "../validators/payment.dto";
+import { bankResponseService, BankVerificationResult } from "./bank-response.service";
 
 type VerificationPayload = Record<string, unknown>;
 
@@ -78,6 +80,7 @@ export interface PaginatedPayments {
 
 const repo = () => AppDataSource.getRepository(Payment);
 const userRepo = () => AppDataSource.getRepository(User);
+const rolePaymentRepo = () => AppDataSource.getRepository(RolePayment);
 
 const MONTH_NAMES: Record<string, number> = {
   jan: 1,
@@ -549,6 +552,16 @@ export class PaymentService {
       reason = error instanceof Error ? error.message : "Receipt verification request failed";
     }
 
+    // Fetch user to determine role and expected payment amount
+    const user = await userRepo().findOne({ where: { id: userId } });
+    let expectedAmount = 0;
+    if (user) {
+      const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
+      if (rolePayment) {
+        expectedAmount = Number(rolePayment.monthlyAmount);
+      }
+    }
+
     const upstream = payload ? asRecord(payload.upstream) : null;
     const upstreamResult = asRecord(upstream?.result);
     const verified = Boolean(
@@ -556,57 +569,83 @@ export class PaymentService {
       upstream?.attempted === true &&
       upstreamResult?.ok === true
     );
-    const verifiedData = verified && payload ? this.extractVerifiedData(payload) : null;
-    if (!verified && payload) {
-      const upstreamReason = asString(upstream?.reason);
-      if (upstreamReason) {
-        reason = upstreamReason;
-      }
+
+    // Call dedicated bank response verification service
+    let bankResult: BankVerificationResult | null = null;
+    if (payload && (verified || payload.source === "awash-html" || upstream?.attempted === true)) {
+      bankResult = bankResponseService.verifyBankResponse({
+        payload,
+        userRole: user?.role,
+        expectedAmount,
+      });
     }
-    if (verifiedData) {
-      const duplicateByUrl = await repo().findOne({ where: { url: verifiedData.url } });
-      if (duplicateByUrl) {
-        deleteFile(imagePath);
-        return {
-          verified: true,
-          duplicate: true,
-          message: "Duplicate image: payment receipt URL already exists",
-          existing_payment_id: duplicateByUrl.id,
-        };
+
+    if (bankResult) {
+      // Check duplicate URL
+      if (bankResult.url) {
+        const duplicateByUrl = await repo().findOne({ where: { url: bankResult.url } });
+        if (duplicateByUrl) {
+          deleteFile(imagePath);
+          return {
+            verified: true,
+            duplicate: true,
+            message: "Duplicate image: payment receipt URL already exists",
+            existing_payment_id: duplicateByUrl.id,
+          };
+        }
       }
 
-      const duplicateByReference = await repo().findOne({ where: { reference: verifiedData.reference } });
-      if (duplicateByReference) {
-        deleteFile(imagePath);
-        return {
-          verified: true,
-          duplicate: true,
-          message: "Duplicate image: payment reference already exists",
-          existing_payment_id: duplicateByReference.id,
-        };
+      // Check duplicate Reference
+      if (bankResult.reference) {
+        const duplicateByReference = await repo().findOne({ where: { reference: bankResult.reference } });
+        if (duplicateByReference) {
+          deleteFile(imagePath);
+          return {
+            verified: true,
+            duplicate: true,
+            message: "Duplicate image: payment reference already exists",
+            existing_payment_id: duplicateByReference.id,
+          };
+        }
       }
 
       const payment = await repo().save(repo().create({
         user_id: userId,
         image: imagePath,
-        url: verifiedData.url,
-        provider: verifiedData.provider,
-        reference: verifiedData.reference,
-        status: PaymentStatus.ACCEPTED,
-        date: verifiedData.date,
-        time: verifiedData.time,
-        amount: verifiedData.amount,
-        expirationDate: verifiedData.expirationDate,
+        url: bankResult.url,
+        provider: bankResult.provider,
+        reference: bankResult.reference,
+        status: bankResult.status,
+        date: bankResult.transactionTime,
+        time: bankResult.time,
+        amount: bankResult.formattedAmount,
+        expirationDate: bankResult.expirationDate,
       }));
 
-      await this.activateUserOnSuccessfulPayment(userId);
+      if (bankResult.status === PaymentStatus.ACCEPTED) {
+        await this.activateUserOnSuccessfulPayment(userId);
+        return {
+          verified: true,
+          duplicate: false,
+          payment,
+          message: bankResult.message,
+        };
+      }
 
+      // PENDING (e.g. underpaid amount) or REJECTED (e.g. receiver name or account mismatch)
       return {
-        verified: true,
-        duplicate: false,
+        verified: false,
         payment,
-        message: "Payment receipt verified successfully",
+        message: bankResult.message,
+        reason: bankResult.reason || bankResult.message,
       };
+    }
+
+    if (!verified && payload) {
+      const upstreamReason = asString(upstream?.reason);
+      if (upstreamReason) {
+        reason = upstreamReason;
+      }
     }
 
     const payment = await repo().save(repo().create({

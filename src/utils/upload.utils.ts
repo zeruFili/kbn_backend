@@ -56,10 +56,7 @@ function generateUniqueFileName(originalName: string): string {
     .basename(originalName, ext)
     .replace(/[^a-zA-Z0-9_\-.]/g, "_")
     .slice(0, 100);
-  const uniqueSuffix = new Date()
-    .toISOString()
-    .replace(/[-:.]/g, "")
-    .slice(0, -5);
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   return `${baseName}-${uniqueSuffix}${ext}`;
 }
 
@@ -130,12 +127,34 @@ export function getFilePathsFromRequest(
   req: Request,
   subfolder: string
 ): string[] {
-  const files = req.files as Express.Multer.File[] | undefined;
-  if (!files || files.length === 0) return [];
+  if (req.file) {
+    return [`/${UPLOAD_DIR}/${subfolder}/${req.file.filename}`];
+  }
 
-  return files.map(
-    (file) => `/${UPLOAD_DIR}/${subfolder}/${file.filename}`
-  );
+  const files = req.files;
+  if (!files) return [];
+
+  if (Array.isArray(files)) {
+    return Array.from(
+      new Set(
+        files.map((file) => `/${UPLOAD_DIR}/${subfolder}/${file.filename}`)
+      )
+    );
+  }
+
+  if (typeof files === "object") {
+    const paths: string[] = [];
+    for (const field of Object.values(files)) {
+      if (Array.isArray(field)) {
+        for (const file of field) {
+          paths.push(`/${UPLOAD_DIR}/${subfolder}/${file.filename}`);
+        }
+      }
+    }
+    return Array.from(new Set(paths));
+  }
+
+  return [];
 }
 
 export interface UploadFieldOption {

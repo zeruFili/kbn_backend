@@ -59,6 +59,18 @@ export class PaymentController {
 
       const status = (req.query.status ?? req.query.payment_status) as PaymentStatus | PaymentStatus[] | string | string[] | undefined;
 
+      const expired = (req.query.expired ?? req.query.is_expired) as boolean | string | undefined;
+      const expirationFrom = (
+        req.query.expiration_from ??
+        req.query.expirationFrom ??
+        req.query.expiration_date_from
+      ) as string | undefined;
+      const expirationTo = (
+        req.query.expiration_to ??
+        req.query.expirationTo ??
+        req.query.expiration_date_to
+      ) as string | undefined;
+
       const result = await paymentService.findAll(req.user.id, req.user.role, {
         page,
         limit,
@@ -71,6 +83,9 @@ export class PaymentController {
         userId,
         userName,
         status,
+        expired,
+        expirationFrom,
+        expirationTo,
       });
 
       res.status(200).json({ success: true, ...result });
@@ -175,6 +190,24 @@ export class PaymentController {
       res.status(200).json({
         success: true,
         message: "Payment deleted successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getValidityStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+
+      const targetUserId = req.params.userId || req.user.id;
+      const validity = await paymentService.getUserPaymentValidity(targetUserId, req.user);
+
+      res.status(200).json({
+        success: true,
+        data: validity,
       });
     } catch (error) {
       next(error);

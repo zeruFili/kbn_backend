@@ -62,6 +62,38 @@ export class Payment {
   @Column({ type: "text", nullable: true })
   image: string | null;
 
+  // Expiration date (when the payment / membership access expires)
+  @Index()
+  @Column({ name: "expiration_date", type: "timestamptz", nullable: true })
+  expirationDate: Date | null;
+
+  get expiration_date(): Date | null {
+    return this.expirationDate;
+  }
+
+  set expiration_date(value: Date | null) {
+    this.expirationDate = value;
+  }
+
+  get isExpired(): boolean {
+    if (!this.expirationDate) return false;
+    return new Date() > new Date(this.expirationDate);
+  }
+
+  get is_expired(): boolean {
+    return this.isExpired;
+  }
+
+  get isValid(): boolean {
+    if (this.status !== PaymentStatus.ACCEPTED) return false;
+    if (!this.expirationDate) return true;
+    return new Date() <= new Date(this.expirationDate);
+  }
+
+  get is_valid(): boolean {
+    return this.isValid;
+  }
+
   // ---------- Audit ----------
 
   @Index()
@@ -70,4 +102,28 @@ export class Payment {
 
   @UpdateDateColumn({ type: "timestamptz", nullable: true })
   updated_at: Date;
+
+  toJSON() {
+    return {
+      id: this.id,
+      user_id: this.user_id,
+      user: this.user,
+      date: this.date,
+      time: this.time,
+      amount: this.amount,
+      status: this.status,
+      provider: this.provider,
+      reference: this.reference,
+      url: this.url,
+      image: this.image,
+      expirationDate: this.expirationDate,
+      expiration_date: this.expirationDate,
+      isExpired: this.isExpired,
+      is_expired: this.isExpired,
+      isValid: this.isValid,
+      is_valid: this.isValid,
+      created_at: this.created_at,
+      updated_at: this.updated_at,
+    };
+  }
 }

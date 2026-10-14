@@ -21,6 +21,7 @@ type VerificationData = {
   date: Date;
   time: string;
   amount: string;
+  expirationDate: Date | null;
 };
 
 type VerificationResponse = {
@@ -60,6 +61,9 @@ export interface PaymentListOptions {
   userId?: string;
   userName?: string;
   status?: PaymentStatus | PaymentStatus[] | string | string[];
+  expired?: boolean | string;
+  expirationFrom?: string;
+  expirationTo?: string;
 }
 
 export interface PaginatedPayments {
@@ -229,7 +233,110 @@ function findPaymentDate(receipt: Record<string, unknown>): unknown {
   ));
 }
 
+function findExpirationDate(
+  receipt: Record<string, unknown> | null,
+  detected: Record<string, unknown> | null
+): Date | null {
+  const sources = [receipt, detected].filter(
+    (s): s is Record<string, unknown> => s !== null && s !== undefined
+  );
+  for (const source of sources) {
+    const raw = findReceiptField(source, (key) => (
+      key.includes("expiration") ||
+      key.includes("expiry") ||
+      key.includes("expire") ||
+      key.includes("validuntil") ||
+      key.includes("validto") ||
+      key.includes("duedate")
+    ));
+    if (raw) {
+      const parsed = parseReceiptDate(raw);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
+  return null;
+}
+
 export class PaymentService {
+  calculateDefaultExpirationDate(paymentDate: Date, months: number = 1): Date {
+    const exp = new Date(paymentDate.getTime());
+    exp.setMonth(exp.getMonth() + months);
+    return exp;
+  }
+
+  isPaymentValid(payment: Payment): boolean {
+    if (payment.status !== PaymentStatus.ACCEPTED) return false;
+    if (!payment.expirationDate) return true;
+    return new Date() <= new Date(payment.expirationDate);
+  }
+
+  isPaymentExpired(payment: Payment): boolean {
+    if (!payment.expirationDate) return false;
+    return new Date() > new Date(payment.expirationDate);
+  }
+
+  async getUserPaymentValidity(
+    userId: string,
+    requester?: { id: string; role: UserRole }
+  ): Promise<{
+    userId: string;
+    hasPayment: boolean;
+    isValid: boolean;
+    isExpired: boolean;
+    expirationDate: Date | null;
+    daysRemaining: number;
+    latestPayment: Payment | null;
+  }> {
+    if (requester && requester.role !== UserRole.Admin && requester.id !== userId) {
+      throw new AppError(403, "Forbidden: You can only access your own payment validity information");
+    }
+
+    const latestAcceptedPayment = await repo().findOne({
+      where: { user_id: userId, status: PaymentStatus.ACCEPTED },
+      order: { created_at: "DESC" },
+    });
+
+    if (!latestAcceptedPayment) {
+      const latestAnyPayment = await repo().findOne({
+        where: { user_id: userId },
+        order: { created_at: "DESC" },
+      });
+
+      return {
+        userId,
+        hasPayment: Boolean(latestAnyPayment),
+        isValid: false,
+        isExpired: false,
+        expirationDate: null,
+        daysRemaining: 0,
+        latestPayment: latestAnyPayment || null,
+      };
+    }
+
+    const now = new Date();
+    const expirationDate = latestAcceptedPayment.expirationDate
+      ? new Date(latestAcceptedPayment.expirationDate)
+      : null;
+    const isExpired = Boolean(expirationDate && now > expirationDate);
+    const isValid = Boolean(!expirationDate || now <= expirationDate);
+
+    let daysRemaining = 0;
+    if (expirationDate) {
+      const diffTime = expirationDate.getTime() - now.getTime();
+      daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    }
+
+    return {
+      userId,
+      hasPayment: true,
+      isValid,
+      isExpired,
+      expirationDate,
+      daysRemaining,
+      latestPayment: latestAcceptedPayment,
+    };
+  }
+
   async findById(
     id: string,
     requester?: { id: string; role: UserRole }
@@ -267,6 +374,17 @@ export class PaymentService {
 
     const previousImage = payment.image;
     Object.assign(payment, dto);
+
+    if (dto.expirationDate !== undefined) {
+      payment.expirationDate = dto.expirationDate;
+    } else if (dto.expiration_date !== undefined) {
+      payment.expirationDate = dto.expiration_date;
+    }
+
+    if (payment.status === PaymentStatus.ACCEPTED && !payment.expirationDate) {
+      payment.expirationDate = this.calculateDefaultExpirationDate(payment.date || new Date());
+    }
+
     const saved = await repo().save(payment);
 
     if (previousImage && previousImage !== saved.image) {
@@ -306,12 +424,18 @@ export class PaymentService {
     const { exactDate, day } = this.parseExactDateOrDay(options.date, parsedDayParam);
     const dateFrom = this.parseDateFilter(options.dateFrom, "date_from");
     const dateTo = this.parseDateFilter(options.dateTo, "date_to");
+    const expirationFrom = this.parseDateFilter(options.expirationFrom, "expiration_from");
+    const expirationTo = this.parseDateFilter(options.expirationTo, "expiration_to");
     const month = this.parseMonth(options.month);
     const year = this.parseYear(options.year);
     const statuses = this.parseStatus(options.status);
 
     if (dateFrom && dateTo && dateFrom > dateTo) {
       throw new AppError(400, "date_from must be before or equal to date_to");
+    }
+
+    if (expirationFrom && expirationTo && expirationFrom > expirationTo) {
+      throw new AppError(400, "expiration_from must be before or equal to expiration_to");
     }
 
     const query = repo().createQueryBuilder("payment")
@@ -367,6 +491,25 @@ export class PaymentService {
       const dateToExclusive = new Date(dateTo);
       dateToExclusive.setUTCDate(dateToExclusive.getUTCDate() + 1);
       query.andWhere("payment.created_at < :dateToExclusive", { dateToExclusive });
+    }
+
+    if (expirationFrom) {
+      query.andWhere("payment.expiration_date >= :expirationFrom", { expirationFrom });
+    }
+
+    if (expirationTo) {
+      const expirationToExclusive = new Date(expirationTo);
+      expirationToExclusive.setUTCDate(expirationToExclusive.getUTCDate() + 1);
+      query.andWhere("payment.expiration_date < :expirationToExclusive", { expirationToExclusive });
+    }
+
+    if (options.expired !== undefined) {
+      const isExpiredFilter = options.expired === true || options.expired === "true";
+      if (isExpiredFilter) {
+        query.andWhere("payment.expiration_date IS NOT NULL AND payment.expiration_date < NOW()");
+      } else {
+        query.andWhere("(payment.expiration_date IS NULL OR payment.expiration_date >= NOW())");
+      }
     }
 
     const [data, total] = await query
@@ -453,6 +596,7 @@ export class PaymentService {
         date: verifiedData.date,
         time: verifiedData.time,
         amount: verifiedData.amount,
+        expirationDate: verifiedData.expirationDate,
       }));
 
       await this.activateUserOnSuccessfulPayment(userId);
@@ -475,6 +619,7 @@ export class PaymentService {
       date: new Date(),
       time: currentTime(),
       amount: "0.00",
+      expirationDate: null,
     }));
 
     return {
@@ -658,6 +803,10 @@ export class PaymentService {
       return null;
     }
 
+    const receiptRecord = (upstreamReceipt ?? receipt) as Record<string, unknown> | null;
+    const explicitExpiration = findExpirationDate(receiptRecord, detected);
+    const expirationDate = explicitExpiration ?? this.calculateDefaultExpirationDate(parsedDate);
+
     return {
       url,
       provider,
@@ -665,6 +814,7 @@ export class PaymentService {
       date: parsedDate,
       time: parsedDate.toISOString().slice(11, 19),
       amount: normalizeAmount(amountValue),
+      expirationDate,
     };
   }
 

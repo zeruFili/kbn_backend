@@ -12,4 +12,20 @@ export class UpdatePaymentDto {
   @IsOptional() @IsString() image?: string | null;
   @IsOptional() @IsEnum(PaymentStatus) status?: PaymentStatus;
   @IsOptional() @IsString() amount?: string;
+  @IsOptional() @Type(() => Date) @IsDate() expirationDate?: Date | null;
+  @IsOptional() @Type(() => Date) @IsDate() expiration_date?: Date | null;
+}
+
+export class PaymentQueryDto {
+  @IsOptional() @IsUUID() userId?: string;
+  @IsOptional() @IsString() userName?: string;
+  @IsOptional() status?: PaymentStatus | string;
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() dateFrom?: string;
+  @IsOptional() @IsString() dateTo?: string;
+  @IsOptional() @IsString() expirationFrom?: string;
+  @IsOptional() @IsString() expirationTo?: string;
+  @IsOptional() expired?: boolean | string;
+  @IsOptional() page?: number;
+  @IsOptional() limit?: number;
 }

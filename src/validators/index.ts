@@ -18,4 +18,8 @@ export {
   UpdateRolePaymentStatusDto,
   RolePaymentQueryDto,
 } from "./role-payment.dto";
+export {
+  UpdatePaymentDto,
+  PaymentQueryDto,
+} from "./payment.dto";
 

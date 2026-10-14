@@ -39,6 +39,32 @@ router.get(
 );
 
 router.get(
+  "/status",
+  authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
+  (req, res, next) => paymentController.getValidityStatus(req, res, next)
+);
+
+router.get(
+  "/user/:userId/status",
+  authenticate,
+  authorize(
+    UserRole.Church,
+    UserRole.Company,
+    UserRole.User,
+    UserRole.Admin,
+    UserRole.Ministry
+  ),
+  (req, res, next) => paymentController.getValidityStatus(req, res, next)
+);
+
+router.get(
   "/:id",
   authenticate,
   authorize(

@@ -18,6 +18,7 @@ import eventRoutes from "./routes/event.routes";
 import paymentRoutes from "./routes/payment.routes";
 import companyRoutes from "./routes/company.routes";
 import categoryRoutes from "./routes/category.routes";
+import telegramRoutes from "./routes/telegram.routes";
 
 import fileRoutes from "./routes/file.routes";
 
@@ -40,6 +41,7 @@ app.use("/api/v1/events", eventRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/companies", companyRoutes);
 app.use("/api/v1/categories", categoryRoutes);
+app.use("/api/v1/telegram", telegramRoutes);
 
 app.use("/api/v1/files", fileRoutes);
 

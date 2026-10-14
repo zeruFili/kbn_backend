@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",
-    "start": "node dist/app.js"
+    "start": "node dist/app.js",
+    "telegram:login": "ts-node src/scripts/telegram-login.ts",
+    "test:telegram": "ts-node src/tests/telegram-sender.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -21,6 +23,7 @@
     "nodemailer": "^9.0.3",
     "pg": "^8.21.0",
     "reflect-metadata": "^0.2.2",
+    "telegram": "^2.26.22",
     "typeorm": "^0.3.20",
     "uuid": "^11.0.3"
   },

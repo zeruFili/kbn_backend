@@ -12,5 +12,6 @@ export {
   UpdateCategoryDto,
   UpdateCategoryStatusDto,
 } from "./category.dto";
+export { SendTelegramDto } from "./telegram.dto";
 
 

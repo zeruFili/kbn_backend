@@ -11,6 +11,7 @@ import { pickSafeUserFields, SafeUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { validatePasswordStrength } from "../utils/password.utils";
 import { emailService } from "./email.service";
+import { telegramService } from "./telegram.service";
 
 const userRepo = () => AppDataSource.getRepository(User);
 const resetTokenRepo = () => AppDataSource.getRepository(PasswordResetToken);
@@ -112,6 +113,12 @@ export class AuthService {
     await resetTokenRepo().save(resetToken);
 
     await emailService.sendPasswordResetEmail(user.email, user.full_name, rawToken);
+
+    if (user.phone) {
+      telegramService.sendPasswordResetNotification(user, rawToken).catch((err) => {
+        console.warn("[AuthService] Telegram reset notification skipped or failed:", err.message);
+      });
+    }
   }
 
   async resetPassword(rawToken: string, password: string, confirmPassword: string): Promise<void> {

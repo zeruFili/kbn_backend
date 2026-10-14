@@ -25,6 +25,7 @@ router.use(authenticate, authorize(UserRole.Admin));
 router.patch("/:id", (req, res, next) => userController.update(req, res, next));
 router.patch("/:id/role", (req, res, next) => userController.updateRole(req, res, next));
 router.patch("/:id/status", (req, res, next) => userController.updateStatus(req, res, next));
+router.post("/:id/telegram", (req, res, next) => userController.sendTelegram(req, res, next));
 router.delete("/:id", (req, res, next) => userController.softDelete(req, res, next));
 
 export default router;

@@ -1,8 +1,11 @@
 import assert from "node:assert";
 import { AppDataSource } from "../config/data-source";
 import { Payment } from "../entities/payment";
+import { User } from "../entities/User";
+import { RolePayment } from "../entities/role-payment";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { paymentService } from "../services/payment.service";
 import { UpdatePaymentDto } from "../validators/payment.dto";
 import { validateContentDto } from "../utils/content-controller.utils";
@@ -89,11 +92,32 @@ async function runPaymentExpirationTests() {
     },
   };
 
+  const mockUserRepo = {
+    findOne: async (options: any) => {
+      const u = new User();
+      u.id = options?.where?.id || "user-1";
+      u.role = UserRole.Company;
+      u.status = UserStatus.PENDING;
+      u.is_active = false;
+      return u;
+    },
+    save: async (u: User) => u,
+  };
+
+  const mockRolePaymentRepo = {
+    findOne: async () => {
+      const rp = new RolePayment();
+      rp.role = UserRole.Company;
+      rp.monthlyAmount = 500;
+      return rp;
+    },
+  };
+
   const originalGetRepository = AppDataSource.getRepository;
   (AppDataSource as any).getRepository = (entity: any) => {
-    if (entity === Payment) {
-      return mockRepo;
-    }
+    if (entity === Payment) return mockRepo;
+    if (entity === User) return mockUserRepo;
+    if (entity === RolePayment) return mockRolePaymentRepo;
     return originalGetRepository.call(AppDataSource, entity);
   };
 
@@ -251,7 +275,73 @@ async function runPaymentExpirationTests() {
 
     console.log("  ✓ Passed: Expiration filtering works correctly");
 
-    console.log("\nAll 9 payment expiration tests completed successfully!");
+    // -------------------------------------------------------------
+    // 10. Service: update payment status to Active with explicit expirationDate
+    // -------------------------------------------------------------
+    console.log("Test 10: Admin updates payment status to Active with explicit expirationDate");
+    const pendingPay1 = mockRepo.create({
+      id: "pay-pending-1",
+      user_id: "user-1",
+      status: PaymentStatus.PENDING,
+      amount: "500.00",
+      date: new Date(),
+      time: "10:00:00",
+      expirationDate: null,
+      created_at: new Date(),
+    });
+    await mockRepo.save(pendingPay1);
+
+    const customExpDate = new Date("2026-12-31T23:59:59.999Z");
+    const activatedWithCustom = await paymentService.update(
+      "pay-pending-1",
+      { status: PaymentStatus.ACCEPTED, expirationDate: customExpDate },
+      { id: "admin-1", role: UserRole.Admin }
+    );
+    assert.strictEqual(activatedWithCustom.status, PaymentStatus.ACCEPTED);
+    assert.strictEqual(activatedWithCustom.expirationDate?.toISOString(), customExpDate.toISOString());
+    console.log("  ✓ Passed: Payment status updated to Active and explicit expiration date accepted");
+
+    // -------------------------------------------------------------
+    // 11. Service: update payment status to Active WITHOUT expirationDate (auto-set)
+    // -------------------------------------------------------------
+    console.log("Test 11: Admin updates payment status to Active without expirationDate (auto-set)");
+    const pendingPay2 = mockRepo.create({
+      id: "pay-pending-2",
+      user_id: "user-1",
+      status: PaymentStatus.PENDING,
+      amount: "500.00",
+      date: new Date("2026-10-15T10:00:00Z"),
+      time: "10:00:00",
+      expirationDate: null,
+      created_at: new Date(),
+    });
+    await mockRepo.save(pendingPay2);
+
+    const activatedAuto = await paymentService.update(
+      "pay-pending-2",
+      { status: PaymentStatus.ACCEPTED },
+      { id: "admin-1", role: UserRole.Admin }
+    );
+    assert.strictEqual(activatedAuto.status, PaymentStatus.ACCEPTED);
+    assert.ok(activatedAuto.expirationDate instanceof Date, "Expiration date should be automatically set");
+    assert.strictEqual(activatedAuto.expirationDate.getUTCMonth(), 10, "Target month should be November (10)");
+    assert.strictEqual(activatedAuto.expirationDate.getUTCDate(), 30, "November has 30 days");
+    console.log("  ✓ Passed: Payment status updated to Active and expiration date automatically set to end of month");
+
+    // -------------------------------------------------------------
+    // 12. Service: updateUserPaymentStatus updates user payment by userId
+    // -------------------------------------------------------------
+    console.log("Test 12: Admin updates user payment status by userId");
+    const userPaymentResult = await paymentService.updateUserPaymentStatus(
+      "user-1",
+      { status: PaymentStatus.ACCEPTED, expirationDate: customExpDate },
+      { id: "admin-1", role: UserRole.Admin }
+    );
+    assert.strictEqual(userPaymentResult.status, PaymentStatus.ACCEPTED);
+    assert.strictEqual(userPaymentResult.user_id, "user-1");
+    console.log("  ✓ Passed: updateUserPaymentStatus successfully sets status and expiration date");
+
+    console.log("\nAll 12 payment expiration tests completed successfully!");
   } finally {
     (AppDataSource as any).getRepository = originalGetRepository;
   }

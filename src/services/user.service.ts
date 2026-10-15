@@ -2,12 +2,15 @@ import { FindOptionsWhere, ILike } from "typeorm";
 import bcrypt from "bcryptjs";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
+import { Payment } from "../entities/payment";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
+import { PaymentStatus } from "../enums/payment-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { pickAdminUserFields, AdminUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { deleteFile } from "../utils/upload.utils";
+import { paymentService } from "./payment.service";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -244,7 +247,7 @@ export class UserService {
 
   async updateStatus(
     id: string,
-    statusUpdate: { status?: UserStatus; is_active?: boolean } | boolean,
+    statusUpdate: { status?: UserStatus; is_active?: boolean; expirationDate?: Date | null; expiration_date?: Date | null } | boolean,
     currentUser: CurrentUser
   ): Promise<UserDetails> {
     const user = await userRepo().findOne({ where: { id } });
@@ -279,6 +282,40 @@ export class UserService {
     user.updated_at = new Date();
 
     const saved = await userRepo().save(user);
+
+    // When admin activates user, synchronize latest payment: set accepted and set expiration date
+    if (nextStatus === UserStatus.ACTIVE && nextIsActive) {
+      const paymentRepo = AppDataSource.getRepository(Payment);
+      const latestPayment = await paymentRepo.findOne({
+        where: { user_id: id },
+        order: { created_at: "DESC" },
+      });
+
+      if (latestPayment) {
+        let paymentChanged = false;
+        if (latestPayment.status !== PaymentStatus.ACCEPTED) {
+          latestPayment.status = PaymentStatus.ACCEPTED;
+          paymentChanged = true;
+        }
+
+        const customExp = typeof statusUpdate === "object"
+          ? (statusUpdate.expirationDate ?? statusUpdate.expiration_date)
+          : undefined;
+
+        if (customExp) {
+          latestPayment.expirationDate = customExp;
+          paymentChanged = true;
+        } else if (!latestPayment.expirationDate) {
+          latestPayment.expirationDate = await paymentService.calculateExpirationDateForPayment(latestPayment);
+          paymentChanged = true;
+        }
+
+        if (paymentChanged) {
+          await paymentRepo.save(latestPayment);
+        }
+      }
+    }
+
     return sanitizeUser(saved);
   }
 

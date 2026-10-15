@@ -1,7 +1,8 @@
 import {
-  IsString, IsIn,IsEnum, IsOptional, IsEmail, IsBoolean, Length,
-  MinLength, Matches, IsInt, Min, Max, IsUrl, ValidateIf,
+  IsString, IsIn, IsEnum, IsOptional, IsEmail, IsBoolean, Length,
+  MinLength, Matches, IsInt, Min, Max, IsUrl, ValidateIf, IsDate,
 } from "class-validator";
+import { Type } from "class-transformer";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 
@@ -129,4 +130,14 @@ export class UpdateUserStatusDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  expirationDate?: Date | null;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  expiration_date?: Date | null;
 }

@@ -84,6 +84,20 @@ router.patch(
   (req, res, next) => paymentController.update(req, res, next)
 );
 
+router.patch(
+  "/:id/status",
+  authenticate,
+  authorize(UserRole.Admin),
+  (req, res, next) => paymentController.update(req, res, next)
+);
+
+router.patch(
+  "/user/:userId/status",
+  authenticate,
+  authorize(UserRole.Admin),
+  (req, res, next) => paymentController.updateUserPaymentStatus(req, res, next)
+);
+
 router.delete(
   "/:id",
   authenticate,

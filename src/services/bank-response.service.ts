@@ -37,8 +37,50 @@ export interface AwashReceipt {
   transaction?: AwashTransactionInfo;
 }
 
+export interface BoaReceipt {
+  source: "boa-json";
+  transactionReference?: string; // 12-char inner reference
+  paymentReference?: string;
+  transactionDate?: string; // "DD/MM/YY HH:MM"
+  transactionType?: string; // "Account Transfer" | ...
+  receiverName?: string;
+  receiverAccount?: string; // masked: "1******00"
+  transferredAmount?: number;
+  serviceCharge?: number;
+  vat?: number;
+  totalAmount?: number;
+  currency?: string; // "ETB"
+  transferredAmountInWord?: string;
+  narrative?: string;
+  upstreamStatus?: string; // typically "success"
+}
+
+export interface ZemenReceipt {
+  source: "zemen-pdf";
+  invoiceNo?: string;
+  date?: string; // e.g. "1-Jan-2026"
+  payerName?: string;
+  payerAccount?: string; // e.g. "173****0000(923141XXXXXX0000)"
+  payerTin?: string;
+  payerVat?: string;
+  recipientName?: string;
+  recipientAccount?: string; // masked: "00****00"
+  paymentOrderNumber?: string;
+  reference?: string; // last 16 chars of the URL token
+  transactionStatus?: string; // "COMPLETED" | ...
+  transactionDetail?: string; // e.g. "Remot On Us - ATM CASH WITHDRAWAL"
+  settledAmount?: number;
+  serviceCharge?: number;
+  vat?: number;
+  disasterRiskCharge?: number;
+  totalAmountPaid?: number;
+  currency?: "ETB";
+  totalAmountInWord?: string;
+  paymentReason?: string;
+}
+
 export interface ParsedBankTransaction {
-  bankSource: string; // e.g. "awash-html", "cbe-birr", "telebirr", "generic"
+  bankSource: string; // e.g. "awash-html", "boa-json", "zemen-pdf", "cbe-birr", "telebirr", "generic"
   transactionId: string | null;
   transactionTime: Date;
   timeString: string;
@@ -198,7 +240,51 @@ function parseDateTimeString(value: unknown): Date {
     if (!isNaN(d.getTime())) return d;
   }
 
-  const standard = new Date(str);
+  // BoA format: "DD/MM/YY HH:MM" or "DD/MM/YYYY HH:MM"
+  const slashMatch = str.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+  );
+  if (slashMatch) {
+    const [, day, month, yStr, h = "00", m = "00", s = "00"] = slashMatch;
+    let year = parseInt(yStr, 10);
+    if (year < 100) year += 2000;
+    const d = new Date(
+      year,
+      parseInt(month, 10) - 1,
+      parseInt(day, 10),
+      parseInt(h, 10),
+      parseInt(m, 10),
+      parseInt(s, 10)
+    );
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Zemen format: "D-Mon-YYYY" (e.g. "1-Jan-2026", "3-Jun-2026") with optional Amharic colon
+  const cleanedZemen = str.replace(/\u1361/g, ":").trim();
+  const dMonYMatch = cleanedZemen.match(
+    /^(\d{1,2})[-/ ]([A-Za-z]{3,9})[-/ ](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
+  );
+  if (dMonYMatch) {
+    const [, day, monStr, yStr, h = "00", m = "00", s = "00"] = dMonYMatch;
+    const monthMap: Record<string, number> = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    const monthIndex = monthMap[monStr.toLowerCase().slice(0, 3)];
+    if (monthIndex !== undefined) {
+      const d = new Date(
+        parseInt(yStr, 10),
+        monthIndex,
+        parseInt(day, 10),
+        parseInt(h, 10),
+        parseInt(m, 10),
+        parseInt(s, 10)
+      );
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  const standard = new Date(str.replace(/\u1361/g, ":"));
   return isNaN(standard.getTime()) ? new Date() : standard;
 }
 
@@ -215,8 +301,8 @@ export class BankResponseService {
   /**
    * Default expected receiver credentials if not provided via options or environment
    */
-  readonly DEFAULT_RECEIVER_NAME = process.env.EXPECTED_RECEIVER_NAME || "Lidya Yosef Gebeto";
-  readonly DEFAULT_RECEIVER_ACCOUNT = process.env.EXPECTED_RECEIVER_ACCOUNT || "1********1898";
+  readonly DEFAULT_RECEIVER_NAME = process.env.EXPECTED_RECEIVER_NAME || "KINGDOM BUILDERS MINISTRY";
+  readonly DEFAULT_RECEIVER_ACCOUNT = process.env.EXPECTED_RECEIVER_ACCOUNT || "0012521619011";
 
   /**
    * Main entrypoint to verify an upstream bank response payload.
@@ -288,9 +374,10 @@ export class BankResponseService {
     let message = "Payment receipt verified and processed successfully";
 
     if (!receiverValidation.isValid) {
-      status = PaymentStatus.REJECTED;
+      // If receiver name or account does not match, mark as PENDING for manual review instead of rejecting
+      status = PaymentStatus.PENDING;
       reason = receiverValidation.reason;
-      message = `Receiver validation failed: ${reason}`;
+      message = `Receiver information mismatch (${reason}). Payment marked as pending review.`;
     } else if (amountValidation.isUnderpaid) {
       // Underpaid payments are put into PENDING status according to business rules
       status = PaymentStatus.PENDING;
@@ -351,7 +438,31 @@ export class BankResponseService {
       return this.parseAwashReceipt(awashData, url);
     }
 
-    // Case 2: Generic or other bank receipt (e.g. CBE Birr, Telebirr)
+    // Case 2: Bank of Abyssinia JSON Receipt (source: "boa-json")
+    if (
+      upstreamReceipt?.source === "boa-json" ||
+      payload.source === "boa-json" ||
+      url?.includes("bankofabyssinia.com") ||
+      (typeof payload.provider === "string" && (payload.provider.toLowerCase().includes("abyssinia") || payload.provider.toLowerCase().includes("boa"))) ||
+      (typeof detected?.provider === "string" && (detected.provider.toLowerCase().includes("abyssinia") || detected.provider.toLowerCase().includes("boa")))
+    ) {
+      const rawBoa = (upstreamReceipt || payload) as Record<string, unknown>;
+      return this.parseBoaReceipt(rawBoa, url);
+    }
+
+    // Case 3: Zemen Bank PDF Receipt (source: "zemen-pdf")
+    if (
+      upstreamReceipt?.source === "zemen-pdf" ||
+      payload.source === "zemen-pdf" ||
+      url?.includes("zemenbank.com") ||
+      (typeof payload.provider === "string" && payload.provider.toLowerCase().includes("zemen")) ||
+      (typeof detected?.provider === "string" && detected.provider.toLowerCase().includes("zemen"))
+    ) {
+      const rawZemen = (upstreamReceipt || payload) as Record<string, unknown>;
+      return this.parseZemenReceipt(rawZemen, url);
+    }
+
+    // Case 4: Generic or other bank receipt (e.g. CBE Birr, Telebirr)
     return this.parseGenericReceipt(upstreamReceipt, detected, upstream, payload, url);
   }
 
@@ -425,6 +536,109 @@ export class BankResponseService {
   }
 
   /**
+   * Specialized parser for Bank of Abyssinia receipts (source: 'boa-json').
+   */
+  private parseBoaReceipt(raw: Record<string, unknown>, url: string | null): ParsedBankTransaction | null {
+    // BoA quirk: Handle header/body envelope wrapper { header: { status }, body: [ { ...receipt } ] }
+    let receipt = raw;
+    if (Array.isArray(raw.body) && raw.body.length > 0 && typeof raw.body[0] === "object") {
+      const inner = raw.body[0] as Record<string, unknown>;
+      const header = asRecord(raw.header);
+      receipt = {
+        ...inner,
+        upstreamStatus: asString(header?.status) || asString(inner.upstreamStatus),
+      };
+    }
+
+    const boa = receipt as unknown as BoaReceipt;
+    const parsedDate = parseDateTimeString(boa.transactionDate);
+
+    // BoA amount can be in transferredAmount or totalAmount, or string with "ETB"
+    const amountVal =
+      typeof boa.transferredAmount === "number" && boa.transferredAmount > 0
+        ? boa.transferredAmount
+        : typeof boa.totalAmount === "number" && boa.totalAmount > 0
+        ? boa.totalAmount
+        : parseAmountToNumber(boa.transferredAmount ?? boa.totalAmount);
+
+    const transactionId = asString(boa.transactionReference) || asString(boa.paymentReference);
+
+    // BoA never exposes payer/sender fields in public slips
+    const receiverName = asString(boa.receiverName);
+    const receiverAccount = asString(boa.receiverAccount);
+
+    return {
+      bankSource: "boa-json",
+      transactionId: transactionId || null,
+      transactionTime: parsedDate,
+      timeString: parsedDate.toTimeString().slice(0, 8),
+      amount: amountVal,
+      formattedAmount: amountVal.toFixed(2),
+      senderName: null,
+      senderAccount: null,
+      receiverName: receiverName ? decodeHtmlEntities(receiverName) : null,
+      receiverAccount,
+      receiverBank: "Bank of Abyssinia",
+      provider: "abyssinia",
+      url,
+      extra: {
+        narrative: boa.narrative || "",
+        transactionType: boa.transactionType || "Account Transfer",
+        upstreamStatus: boa.upstreamStatus || "",
+      },
+      rawReceipt: raw,
+    };
+  }
+
+  /**
+   * Specialized parser for Zemen Bank receipts (source: 'zemen-pdf').
+   */
+  private parseZemenReceipt(raw: Record<string, unknown>, url: string | null): ParsedBankTransaction | null {
+    const zemen = raw as unknown as ZemenReceipt;
+    const parsedDate = parseDateTimeString(zemen.date);
+
+    // Amounts are numbers: settledAmount or totalAmountPaid
+    const amountVal =
+      typeof zemen.settledAmount === "number" && zemen.settledAmount > 0
+        ? zemen.settledAmount
+        : typeof zemen.totalAmountPaid === "number" && zemen.totalAmountPaid > 0
+        ? zemen.totalAmountPaid
+        : parseAmountToNumber(zemen.settledAmount ?? zemen.totalAmountPaid);
+
+    const transactionId =
+      asString(zemen.reference) ||
+      asString(zemen.paymentOrderNumber) ||
+      asString(zemen.invoiceNo);
+
+    const receiverName = asString(zemen.recipientName);
+    const receiverAccount = asString(zemen.recipientAccount);
+    const senderName = asString(zemen.payerName);
+    const senderAccount = asString(zemen.payerAccount);
+
+    return {
+      bankSource: "zemen-pdf",
+      transactionId: transactionId || null,
+      transactionTime: parsedDate,
+      timeString: parsedDate.toTimeString().slice(0, 8),
+      amount: amountVal,
+      formattedAmount: amountVal.toFixed(2),
+      senderName,
+      senderAccount,
+      receiverName: receiverName ? decodeHtmlEntities(receiverName) : null,
+      receiverAccount,
+      receiverBank: "Zemen Bank",
+      provider: "zemen",
+      url,
+      extra: {
+        transactionDetail: zemen.transactionDetail || "",
+        transactionStatus: zemen.transactionStatus || "",
+        paymentReason: zemen.paymentReason || "",
+      },
+      rawReceipt: raw,
+    };
+  }
+
+  /**
    * Parser for standard JSON bank receipts (CBE Birr, CBE, Telebirr, and generic aggregators).
    */
   private parseGenericReceipt(
@@ -492,7 +706,9 @@ export class BankResponseService {
       "cbe";
 
     const bankSource =
-      provider.toLowerCase().includes("awash") ? "awash" :
+      provider.toLowerCase().includes("awash") ? "awash-html" :
+      provider.toLowerCase().includes("abyssinia") || provider.toLowerCase().includes("boa") ? "boa-json" :
+      provider.toLowerCase().includes("zemen") ? "zemen-pdf" :
       provider.toLowerCase().includes("telebirr") ? "telebirr" :
       provider.toLowerCase().includes("cbe") ? "cbe-birr" : "generic";
 
@@ -586,12 +802,12 @@ export class BankResponseService {
    * Compares only the available, verifiable account information and does not treat an unverified match as successful.
    *
    * Example:
-   * Pattern: "1********1898"
-   * Actual:  "1********1898" -> true
-   * Actual:  "1000123451898" -> true
-   * Actual:  "XXXXX******1898" -> true (suffix matches)
-   * Actual:  "2********1898" -> false (prefix mismatch)
-   * Actual:  "1********9999" -> false (suffix mismatch)
+   * Pattern: "0012521619011"
+   * Actual:  "0012521619011" -> true
+   * Actual:  "0012*****9011" -> true
+   * Actual:  "XXXXX******9011" -> true (suffix matches)
+   * Actual:  "9912*****9011" -> false (prefix mismatch)
+   * Actual:  "0012*****8888" -> false (suffix mismatch)
    * Actual:  "*********"      -> false (no verifiable unmasked digits)
    */
   matchesMaskedAccount(actual: string | null, expectedPattern: string): boolean {
@@ -613,7 +829,7 @@ export class BankResponseService {
       return false;
     }
 
-    // Check suffix (most accounts expose the last 3-4 digits, e.g. 1898)
+    // Check suffix (most accounts expose the last 3-4 digits, e.g. 9011 or 011)
     if (expectedParts.suffix && actualParts.suffix) {
       const minSuffixLen = Math.min(expectedParts.suffix.length, actualParts.suffix.length);
       const expectedEnd = expectedParts.suffix.slice(-minSuffixLen);

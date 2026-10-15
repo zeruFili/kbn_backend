@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import { IsDate, IsEnum, IsOptional, IsString, IsUUID, Length } from "class-validator";
 import { PaymentStatus } from "../enums/payment-status.enum";
 
@@ -10,7 +10,20 @@ export class UpdatePaymentDto {
   @IsOptional() @IsString() @Length(1, 255) reference?: string | null;
   @IsOptional() @IsString() url?: string | null;
   @IsOptional() @IsString() image?: string | null;
-  @IsOptional() @IsEnum(PaymentStatus) status?: PaymentStatus;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      const v = value.trim().toLowerCase();
+      if (v === "active" || v === "accepted" || v === "accept") return PaymentStatus.ACCEPTED;
+      if (v === "rejected" || v === "reject") return PaymentStatus.REJECTED;
+      if (v === "pending" || v === "pend") return PaymentStatus.PENDING;
+    }
+    return value;
+  })
+  @IsEnum(PaymentStatus)
+  status?: PaymentStatus;
+
   @IsOptional() @IsString() amount?: string;
   @IsOptional() @Type(() => Date) @IsDate() expirationDate?: Date | null;
   @IsOptional() @Type(() => Date) @IsDate() expiration_date?: Date | null;

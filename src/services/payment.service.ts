@@ -261,10 +261,31 @@ function findExpirationDate(
 }
 
 export class PaymentService {
+  async calculateExpirationDateForPayment(
+    payment: Payment,
+    customDate?: Date | null
+  ): Promise<Date> {
+    if (customDate) {
+      return customDate;
+    }
+
+    let coveredMonths = 1;
+    const user = await userRepo().findOne({ where: { id: payment.user_id } });
+    if (user) {
+      const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
+      const expectedAmount = rolePayment ? Number(rolePayment.monthlyAmount) : 0;
+      const actualAmount = Number(payment.amount) || 0;
+      if (expectedAmount > 0 && actualAmount >= expectedAmount) {
+        coveredMonths = Math.max(1, Math.floor(actualAmount / expectedAmount));
+      }
+    }
+
+    const baseDate = payment.date ? new Date(payment.date) : new Date();
+    return bankResponseService.calculateSubscriptionExpiration(baseDate, coveredMonths);
+  }
+
   calculateDefaultExpirationDate(paymentDate: Date, months: number = 1): Date {
-    const exp = new Date(paymentDate.getTime());
-    exp.setMonth(exp.getMonth() + months);
-    return exp;
+    return bankResponseService.calculateSubscriptionExpiration(paymentDate, months);
   }
 
   isPaymentValid(payment: Payment): boolean {
@@ -366,11 +387,19 @@ export class PaymentService {
       throw new AppError(403, "Forbidden: Only admins can update payment information");
     }
 
-    const payment = await this.findById(id);
+    let payment = await repo().findOne({ where: { id } });
+    if (!payment) {
+      // Fallback: check if id is a user ID
+      payment = await repo().findOne({
+        where: { user_id: id },
+        order: { created_at: "DESC" },
+      });
+    }
+    if (!payment) throw new AppError(404, "Payment not found");
 
     if (dto.reference !== undefined && dto.reference !== null && dto.reference !== payment.reference) {
       const duplicate = await repo().findOne({ where: { reference: dto.reference } });
-      if (duplicate && duplicate.id !== id) {
+      if (duplicate && duplicate.id !== payment.id) {
         throw new AppError(409, "Payment reference already exists");
       }
     }
@@ -378,14 +407,16 @@ export class PaymentService {
     const previousImage = payment.image;
     Object.assign(payment, dto);
 
+    // Accept and set explicit expirationDate / expiration_date if provided
     if (dto.expirationDate !== undefined) {
       payment.expirationDate = dto.expirationDate;
     } else if (dto.expiration_date !== undefined) {
       payment.expirationDate = dto.expiration_date;
     }
 
+    // When status is ACCEPTED (Active), automatically calculate and set expirationDate if not set
     if (payment.status === PaymentStatus.ACCEPTED && !payment.expirationDate) {
-      payment.expirationDate = this.calculateDefaultExpirationDate(payment.date || new Date());
+      payment.expirationDate = await this.calculateExpirationDateForPayment(payment);
     }
 
     const saved = await repo().save(payment);
@@ -399,6 +430,43 @@ export class PaymentService {
     }
 
     return saved;
+  }
+
+  async updateUserPaymentStatus(
+    userId: string,
+    dto: UpdatePaymentDto,
+    currentUser?: { id: string; role: UserRole }
+  ): Promise<Payment> {
+    if (currentUser && currentUser.role !== UserRole.Admin) {
+      throw new AppError(403, "Forbidden: Only admins can update payment information");
+    }
+
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    let payment = await repo().findOne({
+      where: { user_id: userId },
+      order: { created_at: "DESC" },
+    });
+
+    if (!payment) {
+      payment = repo().create({
+        user_id: userId,
+        status: dto.status || PaymentStatus.ACCEPTED,
+        amount: dto.amount || "0.00",
+        date: dto.date || new Date(),
+        time: dto.time || new Date().toTimeString().slice(0, 8),
+        provider: dto.provider || "admin_manual",
+        reference: dto.reference || `MANUAL-${Date.now()}`,
+        url: dto.url || null,
+        image: dto.image || null,
+      });
+      payment = await repo().save(payment);
+    }
+
+    return this.update(payment.id, dto, currentUser);
   }
 
   async remove(

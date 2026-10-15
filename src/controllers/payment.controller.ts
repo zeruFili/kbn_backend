@@ -216,6 +216,33 @@ export class PaymentController {
       next(error);
     }
   }
+
+  async updateUserPaymentStatus(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+      if (req.user.role !== UserRole.Admin) {
+        throw new AppError(403, "Forbidden: Only admins can update payment information");
+      }
+
+      const paramUserId = req.params.userId;
+      const targetUserId: string = (Array.isArray(paramUserId) ? paramUserId[0] : paramUserId);
+      if (!targetUserId) {
+        throw new AppError(400, "User ID is required");
+      }
+
+      const dto = await validateContentDto(UpdatePaymentDto, req.body);
+      const payment = await paymentService.updateUserPaymentStatus(targetUserId, dto, req.user);
+      res.status(200).json({
+        success: true,
+        data: payment,
+        message: "User payment status updated successfully",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const paymentController = new PaymentController();

@@ -206,6 +206,8 @@ export class UserController {
       const user = await userService.updateStatus(id, {
         status: dto.status,
         is_active: dto.is_active,
+        expirationDate: dto.expirationDate,
+        expiration_date: dto.expiration_date,
       }, {
         id: req.user.id,
         role: req.user.role,

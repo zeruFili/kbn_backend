@@ -7,6 +7,7 @@ import { authService } from "../services/auth.service";
 import { otpService } from "../services/otp.service";
 import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../validators/auth.dto";
 import { SendOtpDto, VerifyOtpDto, ResetPasswordWithOtpDto } from "../validators/otp.dto";
+import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
 
 import {
@@ -42,6 +43,30 @@ export class AuthController {
         cleanupUploadedFiles(req);
         const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
         res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      // Before successfully registering the user, it has to send an OTP and then verify the user
+      if (!dto.otp) {
+        cleanupUploadedFiles(req);
+        if (!dto.phone) {
+          res.status(400).json({
+            success: false,
+            message: "Phone number is required for registration and OTP verification.",
+          });
+          return;
+        }
+
+        const sendResult = await otpService.generateAndSendOtp(dto.phone, OtpPurpose.REGISTER);
+        res.status(200).json({
+          success: true,
+          requiresOtp: true,
+          message: "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.",
+          data: {
+            identifier: sendResult.identifier,
+            expiresAt: sendResult.expiresAt,
+          },
+        });
         return;
       }
 

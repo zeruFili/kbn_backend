@@ -11,6 +11,8 @@ import { pickAdminUserFields, AdminUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { deleteFile } from "../utils/upload.utils";
 import { paymentService } from "./payment.service";
+import { otpService } from "./otp.service";
+import { OtpPurpose } from "../enums/otp-purpose.enum";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -31,6 +33,7 @@ interface CreateUserInput {
   status?: UserStatus;
   is_active?: boolean;
   profileImage?: string | null;
+  otp?: string;
 }
 
 interface UpdateUserInput {
@@ -136,7 +139,7 @@ export class UserService {
     return user;
   }
 
-  async create(dto: CreateUserInput): Promise<UserDetails> {
+  async create(dto: CreateUserInput, isAdmin = false): Promise<UserDetails> {
     const existingEmail = await userRepo().findOne({ where: { email: dto.email } });
     if (existingEmail) {
       throw new AppError(409, "Email already exists");
@@ -149,19 +152,37 @@ export class UserService {
       ? dto.is_active
       : status === UserStatus.ACTIVE;
 
-    const user = userRepo().create({
-      full_name: dto.full_name,
-      email: dto.email,
-      password_hash,
-      role: dto.role,
-      phone: (dto.phone || undefined) as any,
-      profileImage: dto.profileImage || undefined,
-      status,
-      is_active,
-    });
+    return await AppDataSource.transaction(async (transactionalManager) => {
+      let otpRecordId: string | null = null;
+      if (!isAdmin && dto.otp && dto.phone) {
+        const verifyResult = await otpService.verifyOtp(
+          dto.phone,
+          dto.otp,
+          OtpPurpose.REGISTER,
+          transactionalManager
+        );
+        otpRecordId = verifyResult.record.id;
+      }
 
-    const saved = await userRepo().save(user);
-    return sanitizeUser(saved);
+      const user = transactionalManager.getRepository(User).create({
+        full_name: dto.full_name,
+        email: dto.email,
+        password_hash,
+        role: dto.role,
+        phone: (dto.phone || undefined) as any,
+        profileImage: dto.profileImage || undefined,
+        status,
+        is_active,
+      });
+
+      const saved = await transactionalManager.getRepository(User).save(user);
+
+      if (otpRecordId) {
+        await otpService.linkUser(otpRecordId, saved.id, transactionalManager);
+      }
+
+      return sanitizeUser(saved);
+    });
   }
 
   async update(

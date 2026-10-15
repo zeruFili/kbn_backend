@@ -9,6 +9,7 @@ import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { otpService } from "../services/otp.service";
 import { authService } from "../services/auth.service";
+import { userController } from "../controllers/user.controller";
 import * as smsModule from "../modules/sms";
 
 export async function runOtpVerificationTests() {
@@ -490,7 +491,92 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(resetOtpRecord.userId, resetUser.id, "Reset OTP must link user_id");
     console.log("  ✓ Passed: Password reset verifies OTP, updates password, and marks single-use\n");
 
-    console.log("All 9 OTP Verification Test Suites Passed Successfully! 🚀\n");
+    // -------------------------------------------------------------
+    // Test 10: Registration Controller Automatically Dispatches OTP and Verifies
+    // -------------------------------------------------------------
+    console.log("Test 10: Registration Controller Auto-Dispatches OTP and Verifies");
+    const jovaniPhone = "0911002233";
+    let initStatus = 0;
+    let initBody: any = null;
+
+    const mockInitRes: any = {
+      status: (code: number) => {
+        initStatus = code;
+        return {
+          json: (data: any) => {
+            initBody = data;
+          },
+        };
+      },
+    };
+
+    // Step 1: User submits registration form without OTP
+    const initReq: any = {
+      body: {
+        full_name: "jovani user",
+        email: "jiovan@gmail.com",
+        phone: jovaniPhone,
+        password: "Password123!",
+        role: UserRole.User,
+      },
+    };
+
+    await userController.create(initReq, mockInitRes, () => {});
+
+    assert.strictEqual(initStatus, 200, "Initiating registration without OTP should return 200");
+    assert.strictEqual(initBody.requiresOtp, true, "Response must indicate requiresOtp: true");
+    assert.ok(
+      initBody.message.includes("Verification code sent to your phone via SMS"),
+      "Response message must indicate SMS dispatch"
+    );
+
+    const jovaniSms = sentSmsMessages.find((s) => s.phone === "251911002233");
+    assert.ok(jovaniSms, "SMS should have been delivered to Jovani's phone");
+    const jovaniOtpMatch = jovaniSms.message.match(/\b\d{6}\b/);
+    const jovaniOtp = jovaniOtpMatch![0];
+
+    // Step 2: User completes registration with the received OTP
+    let completeStatus = 0;
+    let completeBody: any = null;
+
+    const mockCompleteRes: any = {
+      status: (code: number) => {
+        completeStatus = code;
+        return {
+          json: (data: any) => {
+            completeBody = data;
+          },
+        };
+      },
+    };
+
+    const completeReq: any = {
+      body: {
+        full_name: "jovani user",
+        email: "jiovan@gmail.com",
+        phone: jovaniPhone,
+        password: "Password123!",
+        role: UserRole.User,
+        otp: jovaniOtp,
+      },
+    };
+
+    await userController.create(completeReq, mockCompleteRes, () => {});
+
+    assert.strictEqual(completeStatus, 201, "Completing registration with valid OTP should return 201 Created");
+    assert.strictEqual(completeBody.message, "User created successfully");
+    assert.strictEqual(completeBody.data.fullName, "jovani user");
+    assert.strictEqual(completeBody.data.email, "jiovan@gmail.com");
+
+    const jovaniOtpRecord = otpsDb.find(
+      (o) => o.identifier === "251911002233" && o.purpose === OtpPurpose.REGISTER
+    );
+    assert.ok(jovaniOtpRecord, "Jovani OTP record must exist in DB");
+    assert.ok(jovaniOtpRecord.usedAt !== null, "Jovani OTP must be marked as used");
+    assert.strictEqual(jovaniOtpRecord.userId, completeBody.data.id, "Jovani user ID must be linked");
+    console.log("  ✓ Passed: Registration auto-sends SMS OTP and completes upon verification\n");
+
+    console.log("All 10 OTP Verification Test Suites Passed Successfully! 🚀\n");
   } finally {
     (AppDataSource as any).getRepository = originalGetRepository;
     (AppDataSource as any).transaction = originalTransaction;

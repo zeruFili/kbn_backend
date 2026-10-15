@@ -11,7 +11,9 @@ import {
 } from "../validators/user.dto";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
+import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { userService } from "../services/user.service";
+import { otpService } from "../services/otp.service";
 import {
   cleanupUploadedFiles,
   getUploadedFilePath,
@@ -108,7 +110,36 @@ export class UserController {
         ...(imagePath ? { profileImage: imagePath } : {}),
       };
       const dto = await validateDto(CreateUserDto, payload);
-      const user = await userService.create(dto);
+
+      const isAdmin = req.user?.role === UserRole.Admin;
+      if (!isAdmin) {
+        if (!dto.phone) {
+          cleanupUploadedFiles(req);
+          res.status(400).json({
+            success: false,
+            message: "Phone number is required for registration and OTP verification.",
+          });
+          return;
+        }
+
+        // Before successfully registering the user, send an OTP via SMS and require verification
+        if (!dto.otp) {
+          cleanupUploadedFiles(req);
+          const sendResult = await otpService.generateAndSendOtp(dto.phone, OtpPurpose.REGISTER);
+          res.status(200).json({
+            success: true,
+            requiresOtp: true,
+            message: "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.",
+            data: {
+              identifier: sendResult.identifier,
+              expiresAt: sendResult.expiresAt,
+            },
+          });
+          return;
+        }
+      }
+
+      const user = await userService.create(dto, isAdmin);
       res.status(201).json({ success: true, data: user, message: "User created successfully" });
     } catch (error) {
       cleanupUploadedFiles(req);

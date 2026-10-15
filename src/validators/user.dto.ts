@@ -44,10 +44,17 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+[1-9]\d{1,14}$/, {
-    message: "Invalid E.164 phone format",
+  @Matches(/^(\+?[1-9]\d{1,14}|0[79]\d{8})$/, {
+    message: "Invalid phone number format",
   })
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: "OTP must be a 6-digit number",
+  })
+  otp?: string;
 
   @IsOptional()
   @IsUrl()

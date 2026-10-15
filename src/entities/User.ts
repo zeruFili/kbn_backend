@@ -24,6 +24,9 @@ export class User {
   @Column({ type: "varchar", length: 20, nullable: true })
   phone: string;
 
+  @Column({ name: "profile_image", type: "varchar", length: 255, nullable: true })
+  profileImage?: string | null;
+
   @Column({ type: "varchar", length: 255, nullable: true })
   website: string;
 

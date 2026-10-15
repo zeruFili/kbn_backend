@@ -168,6 +168,7 @@ export class AuthService {
     role?: UserRole;
     phone?: string;
     website?: string;
+    profileImage?: string | null;
   }): Promise<{
     accessToken: string;
     user: SafeUserOutput;
@@ -187,6 +188,7 @@ export class AuthService {
       role,
       phone: (data.phone || undefined) as any,
       website: data.website || undefined,
+      profileImage: data.profileImage || undefined,
       status: UserStatus.ACTIVE,
       is_active: true,
     });

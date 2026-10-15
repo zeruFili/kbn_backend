@@ -7,6 +7,7 @@ import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { pickAdminUserFields, AdminUserOutput } from "../utils/response.utils";
 import { getUserDetails, UserDetails } from "../utils/user-details.util";
+import { deleteFile } from "../utils/upload.utils";
 
 interface PaginatedResult<T> {
   data: T[];
@@ -26,6 +27,7 @@ interface CreateUserInput {
   phone?: string;
   status?: UserStatus;
   is_active?: boolean;
+  profileImage?: string | null;
 }
 
 interface UpdateUserInput {
@@ -34,6 +36,7 @@ interface UpdateUserInput {
   phone?: string;
   password?: string;
   status?: UserStatus;
+  profileImage?: string | null;
 }
 
 export interface CurrentUser {
@@ -51,6 +54,7 @@ function sanitizeUser(user: User): UserDetails {
     fullName: user.full_name,
     role: user.role,
     status: user.status,
+    profileImage: user.profileImage ?? null,
   };
 }
 
@@ -147,6 +151,7 @@ export class UserService {
       password_hash,
       role: dto.role,
       phone: (dto.phone || undefined) as any,
+      profileImage: dto.profileImage || undefined,
       status,
       is_active,
     });
@@ -160,6 +165,14 @@ export class UserService {
     dto: UpdateUserInput,
     currentUser: CurrentUser
   ): Promise<UserDetails> {
+    if (
+      currentUser &&
+      currentUser.role !== UserRole.Admin &&
+      currentUser.id !== id
+    ) {
+      throw new AppError(403, "Forbidden: You are not authorized to update this user");
+    }
+
     const user = await userRepo().findOne({ where: { id } });
     if (!user) {
       throw new AppError(404, "User not found");
@@ -182,8 +195,19 @@ export class UserService {
     }
 
     if (dto.status !== undefined) {
+      if (currentUser && currentUser.role !== UserRole.Admin) {
+        throw new AppError(403, "Forbidden: Only administrators can update user status");
+      }
       user.status = dto.status;
       user.is_active = dto.status === UserStatus.ACTIVE;
+    }
+
+    if (dto.profileImage !== undefined) {
+      const prevImage = user.profileImage;
+      if (prevImage && prevImage !== dto.profileImage) {
+        deleteFile(prevImage);
+      }
+      user.profileImage = dto.profileImage;
     }
 
     if (dto.password) {

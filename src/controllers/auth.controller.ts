@@ -7,16 +7,37 @@ import { authService } from "../services/auth.service";
 import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../validators/auth.dto";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
 
+import {
+  cleanupUploadedFiles,
+  getUploadedFilePath,
+} from "../utils/upload.utils";
+import { USER_UPLOAD_SUBFOLDER } from "../middlewares/user-upload.middleware";
+
 export class AuthController {
   async register(req: Request, res: Response): Promise<void> {
     try {
+      const uploadedImage =
+        getUploadedFilePath(req, "profileImage", USER_UPLOAD_SUBFOLDER) ||
+        getUploadedFilePath(req, "profile_image", USER_UPLOAD_SUBFOLDER) ||
+        getUploadedFilePath(req, "avatar", USER_UPLOAD_SUBFOLDER) ||
+        getUploadedFilePath(req, "image", USER_UPLOAD_SUBFOLDER) ||
+        getUploadedFilePath(req, "attachmentFiles", USER_UPLOAD_SUBFOLDER);
+
+      const profileImage =
+        uploadedImage ||
+        (typeof req.body.profileImage === "string" ? req.body.profileImage : undefined) ||
+        (typeof req.body.profile_image === "string" ? req.body.profile_image : undefined) ||
+        (typeof req.body.avatar === "string" ? req.body.avatar : undefined);
+
       const body = {
         ...req.body,
         full_name: req.body.full_name || req.body.name,
+        ...(profileImage ? { profileImage } : {}),
       };
       const dto = plainToInstance(RegisterDto, body);
       const errors = await validate(dto);
       if (errors.length > 0) {
+        cleanupUploadedFiles(req);
         const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
         res.status(400).json({ success: false, message: "Validation failed", errors: messages });
         return;
@@ -29,10 +50,12 @@ export class AuthController {
         role: dto.role,
         phone: dto.phone,
         website: dto.website,
+        profileImage: dto.profileImage,
       });
 
       res.status(201).json({ success: true, message: "User registered successfully", data: result });
     } catch (err) {
+      cleanupUploadedFiles(req);
       if (err instanceof AppError) {
         res.status(err.statusCode).json({ success: false, message: err.message });
         return;

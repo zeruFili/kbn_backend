@@ -12,7 +12,8 @@
     "test:role-payment": "ts-node src/tests/role-payment.test.ts",
     "test:payment": "ts-node src/tests/payment-expiration.test.ts",
     "test:bank-response": "ts-node src/tests/bank-response.test.ts",
-    "test:event-registration": "ts-node src/tests/event-registration.test.ts"
+    "test:event-registration": "ts-node src/tests/event-registration.test.ts",
+    "test:user-profile-image": "ts-node src/tests/user-profile-image.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

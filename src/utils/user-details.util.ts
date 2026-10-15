@@ -8,6 +8,7 @@ export interface UserDetails {
   fullName: string;
   role: UserRole;
   status: UserStatus;
+  profileImage: string | null;
 }
 
 const userRepo = () => AppDataSource.getRepository(User);
@@ -20,5 +21,6 @@ export async function getUserDetails(userId: string): Promise<UserDetails | null
     fullName: user.full_name,
     role: user.role,
     status: user.status,
+    profileImage: user.profileImage ?? null,
   };
 }

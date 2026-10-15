@@ -5,9 +5,11 @@ import { resetPasswordLimiter } from "../middlewares/rate-limit.middleware";
 import { forgotPasswordLimiter } from "../middlewares/forgot-password-rate-limit.middleware";
 import { loginLimiter } from "../middlewares/login-rate-limit.middleware";
 
+import { userUploadMiddleware } from "../middlewares/user-upload.middleware";
+
 const router = Router();
 
-router.post("/register", (req, res) => authController.register(req, res));
+router.post("/register", userUploadMiddleware, (req, res) => authController.register(req, res));
 router.post("/login", loginLimiter, (req, res) => authController.login(req, res));
 router.post("/forgot-password", forgotPasswordLimiter, (req, res) => authController.forgotPassword(req, res));
 router.post("/reset-password/:token", resetPasswordLimiter, (req, res) => authController.resetPassword(req, res));

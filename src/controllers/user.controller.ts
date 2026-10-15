@@ -1,4 +1,4 @@
-import { Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { validate } from "class-validator";
 import { plainToInstance } from "class-transformer";
 import { AuthRequest } from "../middlewares/auth.middleware";
@@ -12,6 +12,24 @@ import {
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { userService } from "../services/user.service";
+import {
+  cleanupUploadedFiles,
+  getUploadedFilePath,
+} from "../utils/upload.utils";
+import { USER_UPLOAD_SUBFOLDER } from "../middlewares/user-upload.middleware";
+
+function resolveUserProfileImage(req: Request): string | undefined {
+  return (
+    getUploadedFilePath(req, "profileImage", USER_UPLOAD_SUBFOLDER) ||
+    getUploadedFilePath(req, "profile_image", USER_UPLOAD_SUBFOLDER) ||
+    getUploadedFilePath(req, "avatar", USER_UPLOAD_SUBFOLDER) ||
+    getUploadedFilePath(req, "image", USER_UPLOAD_SUBFOLDER) ||
+    getUploadedFilePath(req, "attachmentFiles", USER_UPLOAD_SUBFOLDER) ||
+    (typeof req.body.profileImage === "string" ? req.body.profileImage : undefined) ||
+    (typeof req.body.profile_image === "string" ? req.body.profile_image : undefined) ||
+    (typeof req.body.avatar === "string" ? req.body.avatar : undefined)
+  );
+}
 
 async function validateDto<T extends object>(dtoClass: new () => T, plain: object): Promise<T> {
   const instance = plainToInstance(dtoClass, plain);
@@ -73,7 +91,8 @@ export class UserController {
 
   async findById(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const id = req.params.id as string;
+      const idParam = req.params.id as string;
+      const id = idParam === "me" && req.user ? req.user.id : idParam;
       const user = await userService.findById(id);
       res.status(200).json({ success: true, data: user });
     } catch (error) {
@@ -83,27 +102,73 @@ export class UserController {
 
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const dto = await validateDto(CreateUserDto, req.body);
+      const imagePath = resolveUserProfileImage(req);
+      const payload = {
+        ...req.body,
+        ...(imagePath ? { profileImage: imagePath } : {}),
+      };
+      const dto = await validateDto(CreateUserDto, payload);
       const user = await userService.create(dto);
       res.status(201).json({ success: true, data: user, message: "User created successfully" });
     } catch (error) {
+      cleanupUploadedFiles(req);
       next(error);
     }
   }
 
   async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
-      const id = req.params.id as string;
-      const dto = await validateDto(UpdateUserDto, req.body);
-
+      const idParam = req.params.id as string;
       if (!req.user) {
+        cleanupUploadedFiles(req);
         res.status(401).json({ success: false, message: "Unauthorized" });
         return;
       }
 
+      const id = idParam === "me" ? req.user.id : idParam;
+      const imagePath = resolveUserProfileImage(req);
+
+      const isImageRemoved =
+        req.body.remove_profile_image === "true" ||
+        req.body.remove_profile_image === true ||
+        req.body.removeProfileImage === "true" ||
+        req.body.removeProfileImage === true ||
+        req.body.remove_avatar === "true" ||
+        req.body.remove_avatar === true ||
+        req.body.profileImage === "" ||
+        req.body.profileImage === "null" ||
+        req.body.profileImage === null ||
+        req.body.profile_image === "" ||
+        req.body.profile_image === "null" ||
+        req.body.profile_image === null;
+
+      let finalProfileImage: string | null | undefined = undefined;
+      if (imagePath) {
+        finalProfileImage = imagePath;
+      } else if (isImageRemoved) {
+        finalProfileImage = null;
+      } else if (typeof req.body.profileImage === "string" && req.body.profileImage.trim()) {
+        finalProfileImage = req.body.profileImage.trim();
+      } else if (typeof req.body.profile_image === "string" && req.body.profile_image.trim()) {
+        finalProfileImage = req.body.profile_image.trim();
+      }
+
+      const payload = {
+        ...req.body,
+        ...(finalProfileImage !== undefined ? { profileImage: finalProfileImage } : {}),
+      };
+
+      delete (payload as Record<string, unknown>).remove_profile_image;
+      delete (payload as Record<string, unknown>).removeProfileImage;
+      delete (payload as Record<string, unknown>).remove_avatar;
+      delete (payload as Record<string, unknown>).profile_image;
+      delete (payload as Record<string, unknown>).avatar;
+
+      const dto = await validateDto(UpdateUserDto, payload);
       const user = await userService.update(id, dto, { id: req.user.id, role: req.user.role });
       res.status(200).json({ success: true, data: user, message: "User updated successfully" });
     } catch (error) {
+      cleanupUploadedFiles(req);
       next(error);
     }
   }

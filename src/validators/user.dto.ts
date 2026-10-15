@@ -1,6 +1,6 @@
 import {
   IsString, IsIn,IsEnum, IsOptional, IsEmail, IsBoolean, Length,
-  MinLength, Matches, IsInt, Min, Max, IsUrl,
+  MinLength, Matches, IsInt, Min, Max, IsUrl, ValidateIf,
 } from "class-validator";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
@@ -66,6 +66,12 @@ export class CreateUserDto {
   professional_experience?: string;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => value !== null)
+  @IsString()
+  @Length(1, 255)
+  profileImage?: string | null;
+
+  @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
 
@@ -102,6 +108,12 @@ export class UpdateUserDto {
     message: "Password must include uppercase, lowercase, digit, and special character",
   })
   password?: string;
+
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== null)
+  @IsString()
+  @Length(1, 255)
+  profileImage?: string | null;
 }
 
 export class UpdateUserRoleDto {

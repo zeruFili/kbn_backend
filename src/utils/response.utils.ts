@@ -7,6 +7,7 @@ export interface SafeUserOutput {
   email: string;
   role: string;
   status: UserStatus;
+  profileImage: string | null;
 }
 
 export interface AdminUserOutput {
@@ -18,6 +19,7 @@ export interface AdminUserOutput {
   last_login_at: Date | null;
   status: UserStatus;
   is_active: boolean;
+  profileImage: string | null;
 }
 
 export function pickSafeUserFields(user: User | null | undefined): SafeUserOutput | null {
@@ -28,6 +30,7 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
     email: user.email,
     role: user.role,
     status: user.status,
+    profileImage: user.profileImage ?? null,
   };
 }
 
@@ -43,5 +46,6 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
     last_login_at: user.last_login_at ?? null,
     status: user.status,
     is_active: user.is_active,
+    profileImage: user.profileImage ?? null,
   };
 }

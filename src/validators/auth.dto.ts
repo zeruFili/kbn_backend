@@ -1,4 +1,4 @@
-import { IsEmail, IsString, Length, Matches, IsOptional, IsIn } from "class-validator";
+import { IsEmail, IsString, Length, Matches, IsOptional, IsIn, ValidateIf } from "class-validator";
 import { UserRole } from "../enums/user-role.enum";
 
 export class LoginDto {
@@ -64,5 +64,11 @@ export class RegisterDto {
   @IsString()
   @Length(1, 255)
   website?: string;
+
+  @IsOptional()
+  @ValidateIf((_obj, value) => value !== null)
+  @IsString()
+  @Length(1, 255)
+  profileImage?: string | null;
 }
 

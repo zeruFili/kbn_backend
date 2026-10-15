@@ -6,7 +6,7 @@ import fs from "fs";
 export const UPLOAD_DIR = process.env.UPLOAD_DIR || "uploads";
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "10485760", 10);
 
-const ALLOWED_IMAGE_TYPES = new Set([
+export const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/jpg",

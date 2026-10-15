@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, requireActiveUser } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { eventRegistrationController } from "../controllers/event-registration.controller";
 
 const router = Router();
 
-// All registration routes require authentication
-router.use(authenticate);
+// All registration routes require active authentication
+router.use(authenticate, requireActiveUser);
 
 // 1. Register for an event
 router.post("/", (req, res, next) =>

@@ -12,29 +12,13 @@ import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { validatePasswordStrength } from "../utils/password.utils";
 import { emailService } from "./email.service";
 
+import { generateAccessToken } from "../utils/jwt.utils";
+
 const userRepo = () => AppDataSource.getRepository(User);
 const resetTokenRepo = () => AppDataSource.getRepository(PasswordResetToken);
 
-const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
-const ACCESS_TOKEN_TTL = (process.env.ACCESS_TOKEN_TTL || "15m") as jwt.SignOptions["expiresIn"];
 const parsedBcryptCost = Number(process.env.BCRYPT_COST);
 const BCRYPT_COST = Number.isFinite(parsedBcryptCost) && parsedBcryptCost > 0 ? parsedBcryptCost : 12;
-
-function generateAccessToken(user: {
-  id: string;
-  role: string;
-  email?: string;
-}): string {
-  return jwt.sign(
-    {
-      sub: user.id,
-      role: user.role,
-      email: user.email,
-    },
-    JWT_SECRET,
-    { expiresIn: ACCESS_TOKEN_TTL }
-  );
-}
 
 function sanitizeUser(user: User): SafeUserOutput {
   return pickSafeUserFields(user)!;
@@ -63,26 +47,15 @@ export class AuthService {
       throw new AppError(401, "Invalid email or password");
     }
 
-    if (user.status === UserStatus.PENDING) {
-      throw new AppError(403, "Account is pending approval. Contact your administrator.");
-    }
-
-    if (user.status === UserStatus.SUSPENDED) {
-      throw new AppError(403, "Account is suspended. Contact your administrator.");
-    }
-
-    if (!user.is_active || user.status === UserStatus.INACTIVE) {
-      throw new AppError(403, "Account is deactivated. Contact your administrator.");
-    }
-
     user.last_login_at = new Date();
     user.updated_at = new Date();
     await userRepo().save(user);
 
     const accessToken = generateAccessToken({
       id: user.id,
-      role: user.role,
       email: user.email,
+      role: user.role,
+      status: user.status,
     });
 
     return {
@@ -189,16 +162,17 @@ export class AuthService {
       phone: (data.phone || undefined) as any,
       website: data.website || undefined,
       profileImage: data.profileImage || undefined,
-      status: UserStatus.ACTIVE,
-      is_active: true,
+      status: UserStatus.PENDING,
+      is_active: false,
     });
 
     const saved = await userRepo().save(user);
 
     const accessToken = generateAccessToken({
       id: saved.id,
-      role: saved.role,
       email: saved.email,
+      role: saved.role,
+      status: saved.status,
     });
 
     return {

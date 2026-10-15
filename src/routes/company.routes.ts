@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
+import { authenticate, authorize, requireActiveUser, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { companyController } from "../controllers/company.controller";
 import { createUploadFieldsMiddleware } from "../utils/upload.utils";
@@ -26,11 +26,11 @@ router.get(
   (req, res, next) => companyController.findAll(req, res, next)
 );
 
-router.get("/my-companies", authenticate, (req, res, next) =>
+router.get("/my-companies", authenticate, requireActiveUser, (req, res, next) =>
   companyController.findMyCompanies(req, res, next)
 );
 
-router.get("/my-company", authenticate, (req, res, next) =>
+router.get("/my-company", authenticate, requireActiveUser, (req, res, next) =>
   companyController.findMyCompany(req, res, next)
 );
 
@@ -44,6 +44,7 @@ router.get(
 router.post(
   "/",
   authenticate,
+  requireActiveUser,
   companyUploadMiddleware,
   (req, res, next) => companyController.create(req, res, next)
 );
@@ -52,6 +53,7 @@ router.post(
 router.patch(
   "/:id",
   authenticate,
+  requireActiveUser,
   companyUploadMiddleware,
   (req, res, next) => companyController.update(req, res, next)
 );
@@ -59,6 +61,7 @@ router.patch(
 router.put(
   "/:id",
   authenticate,
+  requireActiveUser,
   companyUploadMiddleware,
   (req, res, next) => companyController.update(req, res, next)
 );

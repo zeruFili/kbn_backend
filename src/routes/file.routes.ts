@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../middlewares/auth.middleware";
+import { authenticate, requireActiveUser } from "../middlewares/auth.middleware";
 import { createUploadFileMiddleware } from "../utils/upload.utils";
 import { fileController } from "../controllers/file.controller";
 
@@ -14,6 +14,7 @@ const uploadMiddleware = createUploadFileMiddleware({
 router.post(
   "/upload",
   authenticate,
+  requireActiveUser,
   uploadMiddleware,
   (req, res, next) => fileController.upload(req, res, next)
 );

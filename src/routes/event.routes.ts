@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
+import { authenticate, authorize, requireActiveUser, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { eventController } from "../controllers/event.controller";
 import { eventRegistrationController } from "../controllers/event-registration.controller";
@@ -24,8 +24,8 @@ router.put("/:id", authenticate, authorize(UserRole.Admin), eventUploadMiddlewar
 router.delete("/:id", authenticate, authorize(UserRole.Admin), (req, res, next) => eventController.remove(req, res, next));
 
 // Nested registration routes
-router.post("/:id/register", authenticate, (req, res, next) => eventRegistrationController.create(req, res, next));
-router.post("/:id/registrations", authenticate, (req, res, next) => eventRegistrationController.create(req, res, next));
-router.get("/:id/registrations", authenticate, (req, res, next) => eventRegistrationController.listByEvent(req, res, next));
+router.post("/:id/register", authenticate, requireActiveUser, (req, res, next) => eventRegistrationController.create(req, res, next));
+router.post("/:id/registrations", authenticate, requireActiveUser, (req, res, next) => eventRegistrationController.create(req, res, next));
+router.get("/:id/registrations", authenticate, requireActiveUser, (req, res, next) => eventRegistrationController.listByEvent(req, res, next));
 
 export default router;

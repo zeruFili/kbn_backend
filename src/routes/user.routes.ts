@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
+import { authenticate, authorize, requireActiveUser, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { userController } from "../controllers/user.controller";
 import { userUploadMiddleware } from "../middlewares/user-upload.middleware";
@@ -19,8 +19,8 @@ router.get(
 
 router.post("/", userUploadMiddleware, (req, res, next) => userController.create(req, res, next));
 
-// Allow users to update their own profile/image and admins to update any user
-router.patch("/:id", authenticate, userUploadMiddleware, (req, res, next) =>
+// Allow active users to update their own profile/image and admins to update any user
+router.patch("/:id", authenticate, requireActiveUser, userUploadMiddleware, (req, res, next) =>
   userController.update(req, res, next)
 );
 

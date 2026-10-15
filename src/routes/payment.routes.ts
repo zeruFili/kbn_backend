@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, requirePaymentOrActive } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { paymentController } from "../controllers/payment.controller";
 import { createUploadFileMiddleware } from "../utils/upload.utils";
@@ -38,29 +38,18 @@ router.get(
   (req, res, next) => paymentController.list(req, res, next)
 );
 
+// Allow PENDING and INACTIVE users to check validity status; block SUSPENDED users
 router.get(
   "/status",
   authenticate,
-  authorize(
-    UserRole.Church,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Admin,
-    UserRole.Ministry
-  ),
+  requirePaymentOrActive,
   (req, res, next) => paymentController.getValidityStatus(req, res, next)
 );
 
 router.get(
   "/user/:userId/status",
   authenticate,
-  authorize(
-    UserRole.Church,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Admin,
-    UserRole.Ministry
-  ),
+  requirePaymentOrActive,
   (req, res, next) => paymentController.getValidityStatus(req, res, next)
 );
 
@@ -105,16 +94,11 @@ router.delete(
   (req, res, next) => paymentController.remove(req, res, next)
 );
 
+// Allow PENDING and INACTIVE users to submit receipt; block SUSPENDED users
 router.post(
   "/verify",
   authenticate,
-  authorize(
-    UserRole.Church,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Admin,
-    UserRole.Ministry
-  ),
+  requirePaymentOrActive,
   paymentUploadMiddleware,
   (req, res, next) => paymentController.verifyReceipt(req, res, next)
 );

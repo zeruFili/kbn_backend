@@ -11,7 +11,8 @@
     "test:telegram": "ts-node src/tests/telegram-sender.test.ts",
     "test:role-payment": "ts-node src/tests/role-payment.test.ts",
     "test:payment": "ts-node src/tests/payment-expiration.test.ts",
-    "test:bank-response": "ts-node src/tests/bank-response.test.ts"
+    "test:bank-response": "ts-node src/tests/bank-response.test.ts",
+    "test:event-registration": "ts-node src/tests/event-registration.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,9 +1,10 @@
 import {
   Entity, PrimaryColumn, Column, CreateDateColumn,
-  Index, UpdateDateColumn,
+  Index, UpdateDateColumn, OneToMany,
 } from "typeorm";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
+import { EventRegistration } from "./event-registration";
 
 @Entity("user")
 export class User {
@@ -61,4 +62,7 @@ export class User {
 
   @UpdateDateColumn({ type: "timestamptz", nullable: true })
   updated_at: Date;
+
+  @OneToMany(() => EventRegistration, (registration) => registration.user)
+  eventRegistrations?: EventRegistration[];
 }

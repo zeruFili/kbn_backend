@@ -71,6 +71,8 @@ export class EventController {
 
       if (uploadedFiles.length > 0) {
         images = Array.from(new Set(uploadedFiles));
+      } else if (req.body.removeImage === "true" || req.body.removeImage === true) {
+        images = [];
       } else if (req.body.image && typeof req.body.image === "string" && req.body.image.trim()) {
         images = [req.body.image.trim()];
       } else if (req.body.images !== undefined) {

@@ -1,9 +1,10 @@
 import {
   Entity, PrimaryColumn, Column, CreateDateColumn,
-  Index, UpdateDateColumn, ManyToOne, JoinColumn,
+  Index, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany,
 } from "typeorm";
 import { User } from "./User";
 import { Status, EventAvailability } from "../enums/event.enum";
+import { EventRegistration } from "./event-registration";
 
 @Entity("event")
 export class Event {
@@ -60,6 +61,9 @@ export class Event {
   @ManyToOne(() => User, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "created_by" })
   creator: User;
+
+  @OneToMany(() => EventRegistration, (registration) => registration.event)
+  registrations?: EventRegistration[];
 
   // ---------- Audit ----------
 

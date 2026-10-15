@@ -22,4 +22,9 @@ export {
   UpdatePaymentDto,
   PaymentQueryDto,
 } from "./payment.dto";
+export {
+  CreateEventRegistrationDto,
+  UpdateEventRegistrationStatusDto,
+  EventRegistrationQueryDto,
+} from "./event-registration.dto";
 

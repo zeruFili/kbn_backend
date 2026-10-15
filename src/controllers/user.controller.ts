@@ -19,6 +19,7 @@ import {
   getUploadedFilePath,
 } from "../utils/upload.utils";
 import { USER_UPLOAD_SUBFOLDER } from "../middlewares/user-upload.middleware";
+import { generateAccessToken } from "../utils/jwt.utils";
 
 function resolveUserProfileImage(req: Request): string | undefined {
   return (
@@ -140,7 +141,22 @@ export class UserController {
       }
 
       const user = await userService.create(dto, isAdmin);
-      res.status(201).json({ success: true, data: user, message: "User created successfully" });
+      const accessToken = generateAccessToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          ...user,
+          accessToken,
+        },
+        accessToken,
+        message: "User created successfully",
+      });
     } catch (error) {
       cleanupUploadedFiles(req);
       next(error);

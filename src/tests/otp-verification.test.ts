@@ -567,6 +567,8 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(completeBody.message, "User created successfully");
     assert.strictEqual(completeBody.data.fullName, "jovani user");
     assert.strictEqual(completeBody.data.email, "jiovan@gmail.com");
+    assert.ok(completeBody.accessToken, "Response must include accessToken at root");
+    assert.ok(completeBody.data.accessToken, "Response must include accessToken inside data");
 
     const jovaniOtpRecord = otpsDb.find(
       (o) => o.identifier === "251911002233" && o.purpose === OtpPurpose.REGISTER

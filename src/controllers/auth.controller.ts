@@ -81,7 +81,15 @@ export class AuthController {
         otp: dto.otp,
       });
 
-      res.status(201).json({ success: true, message: "User registered successfully", data: result });
+      res.status(201).json({
+        success: true,
+        message: "User registered successfully",
+        data: {
+          ...result.user,
+          ...result,
+        },
+        accessToken: result.accessToken,
+      });
     } catch (err) {
       cleanupUploadedFiles(req);
       if (err instanceof AppError) {

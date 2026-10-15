@@ -51,52 +51,49 @@ async function runCompanyFilterTests() {
     // -------------------------------------------------------------
     // 1. Non-admin user requests companies without status param
     // -------------------------------------------------------------
-    console.log("Test 1: Non-admin without status param gets only active companies");
+    console.log("Test 1: Non-admin without status param gets active companies excluding suspended/inactive");
     capturedWhereClauses = [];
     await companyService.findAll({}, { id: "user-1", role: UserRole.User });
 
-    const hasActiveStatus = capturedWhereClauses.some(
+    const hasHiddenStatuses = capturedWhereClauses.some(
       (w) =>
-        w.query.includes("company.status = :activeStatus") &&
-        w.parameters?.activeStatus === CompanyStatus.ACTIVE
+        w.query.includes("company.status NOT IN (:...hiddenStatuses)") &&
+        Array.isArray(w.parameters?.hiddenStatuses) &&
+        w.parameters.hiddenStatuses.includes(CompanyStatus.SUSPENDED)
     );
     const hasIsActive = capturedWhereClauses.some(
       (w) =>
         w.query.includes("company.is_active = :isActive") &&
         w.parameters?.isActive === true
     );
-    assert.strictEqual(hasActiveStatus, true);
+    assert.strictEqual(hasHiddenStatuses, true);
     assert.strictEqual(hasIsActive, true);
-    console.log("  ✓ Passed: Non-admin query enforces company.status=ACTIVE and company.is_active=true");
+    console.log("  ✓ Passed: Non-admin query enforces company.is_active=true and excludes suspended/inactive companies");
 
     // -------------------------------------------------------------
     // 2. Non-admin user attaching status='pending'
     // -------------------------------------------------------------
-    console.log("Test 2: Non-admin attaching status='pending' still strictly gets only active companies");
+    console.log("Test 2: Non-admin attaching status='pending' filters by status='pending' with is_active=true");
     capturedWhereClauses = [];
     await companyService.findAll(
       { status: CompanyStatus.PENDING },
       { id: "user-1", role: UserRole.User }
     );
 
-    const hasActiveStatusPendingAttempt = capturedWhereClauses.some(
+    const hasPendingStatusMatch = capturedWhereClauses.some(
       (w) =>
-        w.query.includes("company.status = :activeStatus") &&
-        w.parameters?.activeStatus === CompanyStatus.ACTIVE
+        w.query.includes("company.status = :status") &&
+        w.parameters?.status === CompanyStatus.PENDING
     );
     const hasIsActivePendingAttempt = capturedWhereClauses.some(
       (w) =>
         w.query.includes("company.is_active = :isActive") &&
         w.parameters?.isActive === true
     );
-    const hasPendingStatus = capturedWhereClauses.some(
-      (w) => w.parameters?.status === CompanyStatus.PENDING
-    );
 
-    assert.strictEqual(hasActiveStatusPendingAttempt, true);
+    assert.strictEqual(hasPendingStatusMatch, true);
     assert.strictEqual(hasIsActivePendingAttempt, true);
-    assert.strictEqual(hasPendingStatus, false);
-    console.log("  ✓ Passed: Non-admin cannot override active company filter with status='pending'");
+    console.log("  ✓ Passed: Non-admin can filter by specific status with is_active=true enforced");
 
     // -------------------------------------------------------------
     // 3. Non-admin user attaching status='suspended' and is_active=false
@@ -108,18 +105,18 @@ async function runCompanyFilterTests() {
       { id: "church-1", role: UserRole.Church }
     );
 
-    const hasActiveStatusSuspendedAttempt = capturedWhereClauses.some(
+    const hasIsActiveEnforced = capturedWhereClauses.some(
       (w) =>
-        w.query.includes("company.status = :activeStatus") &&
-        w.parameters?.activeStatus === CompanyStatus.ACTIVE
+        w.query.includes("company.is_active = :isActive") &&
+        w.parameters?.isActive === true
     );
     const hasIsActiveFalseAttempt = capturedWhereClauses.some(
       (w) => w.parameters?.isActive === false
     );
 
-    assert.strictEqual(hasActiveStatusSuspendedAttempt, true);
+    assert.strictEqual(hasIsActiveEnforced, true);
     assert.strictEqual(hasIsActiveFalseAttempt, false);
-    console.log("  ✓ Passed: Non-admin is strictly constrained to active companies");
+    console.log("  ✓ Passed: Non-admin is strictly constrained to is_active=true");
 
     // -------------------------------------------------------------
     // 4. Admin user without status param
@@ -204,13 +201,19 @@ async function runCompanyFilterTests() {
     await companyController.findAll(mockReq as any, mockRes, () => {});
     assert.strictEqual(responseStatus, 200);
     assert.strictEqual(responseJson.success, true);
-    const controllerActiveMatch = capturedWhereClauses.some(
+    const controllerStatusMatch = capturedWhereClauses.some(
       (w) =>
-        w.query.includes("company.status = :activeStatus") &&
-        w.parameters?.activeStatus === CompanyStatus.ACTIVE
+        w.query.includes("company.status = :status") &&
+        w.parameters?.status === CompanyStatus.PENDING
     );
-    assert.strictEqual(controllerActiveMatch, true);
-    console.log("  ✓ Passed: Controller properly forwarded non-admin user and enforced active filtering");
+    const controllerIsActiveMatch = capturedWhereClauses.some(
+      (w) =>
+        w.query.includes("company.is_active = :isActive") &&
+        w.parameters?.isActive === true
+    );
+    assert.strictEqual(controllerStatusMatch, true);
+    assert.strictEqual(controllerIsActiveMatch, true);
+    console.log("  ✓ Passed: Controller properly forwarded non-admin user with is_active enforcement");
 
     // -------------------------------------------------------------
     // 8. Search query includes array_to_string for services

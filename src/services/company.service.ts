@@ -64,12 +64,15 @@ export class CompanyService {
     const isAdmin = currentUser?.role === UserRole.Admin;
 
     if (!isAdmin) {
-      // Non-admin users can ONLY retrieve active companies
-      // Even when attaching a status or is_active param, non-admin users only get active companies (is_active: true, status: ACTIVE)
-      qb.andWhere("company.status = :activeStatus", {
-        activeStatus: CompanyStatus.ACTIVE,
-      });
+      // Non-admin users and public visitors can retrieve active companies (is_active: true and not suspended/inactive)
       qb.andWhere("company.is_active = :isActive", { isActive: true });
+      if (options.status) {
+        qb.andWhere("company.status = :status", { status: options.status });
+      } else {
+        qb.andWhere("company.status NOT IN (:...hiddenStatuses)", {
+          hiddenStatuses: [CompanyStatus.INACTIVE, CompanyStatus.SUSPENDED],
+        });
+      }
     } else {
       // Admin users can retrieve companies regardless of their status
       if (options.status) {

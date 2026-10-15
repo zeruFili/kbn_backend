@@ -8,3 +8,4 @@ export { Status as EventStatus } from "./event.enum";
 export { CompanyStatus } from "./company-status.enum";
 export { RolePaymentStatus } from "./role-payment-status.enum";
 export { EventRegistrationStatus } from "./event-registration-status.enum";
+export { OtpPurpose } from "./otp-purpose.enum";

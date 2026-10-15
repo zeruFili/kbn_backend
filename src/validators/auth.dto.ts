@@ -70,5 +70,12 @@ export class RegisterDto {
   @IsString()
   @Length(1, 255)
   profileImage?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6}$/, {
+    message: "OTP must be a 6-digit number",
+  })
+  otp?: string;
 }
 

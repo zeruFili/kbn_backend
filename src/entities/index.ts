@@ -11,3 +11,4 @@ export { UserSocialMedia } from "./user-social-media";
 export { PaymentWarning } from "./payment-warning";
 export { RolePayment } from "./role-payment";
 export { EventRegistration } from "./event-registration";
+export { OtpVerification } from "./otp-verification";

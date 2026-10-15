@@ -4,7 +4,9 @@ import { plainToInstance } from "class-transformer";
 import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
 import { authService } from "../services/auth.service";
+import { otpService } from "../services/otp.service";
 import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../validators/auth.dto";
+import { SendOtpDto, VerifyOtpDto, ResetPasswordWithOtpDto } from "../validators/otp.dto";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
 
 import {
@@ -51,6 +53,7 @@ export class AuthController {
         phone: dto.phone,
         website: dto.website,
         profileImage: dto.profileImage,
+        otp: dto.otp,
       });
 
       res.status(201).json({ success: true, message: "User registered successfully", data: result });
@@ -92,28 +95,86 @@ export class AuthController {
     }
   }
 
-  async forgotPassword(req: Request, res: Response): Promise<void> {
+  async sendOtp(req: Request, res: Response): Promise<void> {
     try {
-      const dto = plainToInstance(ForgotPasswordDto, req.body);
+      const dto = plainToInstance(SendOtpDto, req.body);
       const errors = await validate(dto);
       if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await otpService.generateAndSendOtp(dto.identifier, dto.purpose);
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          identifier: result.identifier,
+          expiresAt: result.expiresAt,
+        },
+      });
+    } catch (err) {
+      if (err instanceof AppError) {
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("Send OTP error:", err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
+  async verifyOtp(req: Request, res: Response): Promise<void> {
+    try {
+      const dto = plainToInstance(VerifyOtpDto, req.body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await otpService.verifyOtp(dto.identifier, dto.otp, dto.purpose);
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          verified: true,
+          identifier: result.record.identifier,
+          purpose: result.record.purpose,
+        },
+      });
+    } catch (err) {
+      if (err instanceof AppError) {
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("Verify OTP error:", err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
+  async forgotPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const identifier = req.body.identifier || req.body.phone || req.body.email;
+      if (!identifier || typeof identifier !== "string" || !identifier.trim()) {
         res.status(200).json({
           success: true,
-          message: "If an account exists with this email, a password reset link has been sent.",
+          message: "If an account exists with this credential, a verification code has been sent.",
         });
         return;
       }
 
-      await authService.forgotPassword(dto.email);
+      await authService.forgotPassword(identifier.trim());
       res.status(200).json({
         success: true,
-        message: "If an account exists with this email, a password reset link has been sent.",
+        message: "If an account exists with this credential, a verification code has been sent.",
       });
     } catch (err) {
       console.error("Forgot password error:", err);
       res.status(200).json({
         success: true,
-        message: "If an account exists with this email, a password reset link has been sent.",
+        message: "If an account exists with this credential, a verification code has been sent.",
       });
     }
   }
@@ -121,6 +182,31 @@ export class AuthController {
   async resetPassword(req: Request, res: Response): Promise<void> {
     try {
       const token = req.params.token as string;
+      const isOtpReset = Boolean(req.body.otp || req.body.identifier || !token);
+
+      if (isOtpReset) {
+        const dto = plainToInstance(ResetPasswordWithOtpDto, req.body);
+        const errors = await validate(dto);
+        if (errors.length > 0) {
+          const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+          res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+          return;
+        }
+
+        await authService.resetPasswordWithOtp(
+          dto.identifier,
+          dto.otp,
+          dto.password,
+          dto.confirmPassword
+        );
+        res.status(200).json({
+          success: true,
+          message: "Password has been reset successfully. Please log in.",
+        });
+        return;
+      }
+
+      // Legacy token-based reset
       if (!token) {
         res.status(400).json({ success: false, message: "Reset token is required" });
         return;

@@ -72,3 +72,28 @@ export function requireExactRole(role: UserRole, message?: string) {
     next();
   };
 }
+
+export function optionalAuthenticate(req: AuthRequest, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const secret = process.env.JWT_SECRET || "default_secret";
+    const decoded = jwt.verify(token, secret) as {
+      sub: string;
+      role: UserRole;
+      email?: string;
+    };
+    req.user = {
+      id: decoded.sub,
+      role: decoded.role,
+      email: decoded.email,
+    };
+  } catch {
+    // Continue unauthenticated if token is invalid or expired
+  }
+  next();
+}

@@ -16,11 +16,17 @@ async function ensureUnique(title: string, slug: string, id?: string): Promise<v
 
 export class BlogService {
   list(): Promise<Blog[]> {
-    return repo().find({ order: { created_at: "DESC" } });
+    return repo().find({
+      order: { created_at: "DESC" },
+      relations: { author: true },
+    });
   }
 
   async findById(id: string): Promise<Blog> {
-    const blog = await repo().findOne({ where: { id } });
+    const blog = await repo().findOne({
+      where: { id },
+      relations: { author: true },
+    });
     if (!blog) throw new AppError(404, "Blog not found");
     return blog;
   }
@@ -28,7 +34,8 @@ export class BlogService {
   async create(dto: CreateBlogDto, adminId: string): Promise<Blog> {
     const slug = generateSlug(dto.title);
     await ensureUnique(dto.title, slug);
-    return repo().save(repo().create({ ...dto, slug, author_id: adminId }));
+    const saved = await repo().save(repo().create({ ...dto, slug, author_id: adminId }));
+    return this.findById(saved.id);
   }
 
   async update(id: string, dto: UpdateBlogDto): Promise<Blog> {

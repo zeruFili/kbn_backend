@@ -16,11 +16,17 @@ async function ensureUnique(title: string, slug: string, id?: string): Promise<v
 
 export class ArticleService {
   list(): Promise<Article[]> {
-    return repo().find({ order: { created_at: "DESC" } });
+    return repo().find({
+      order: { created_at: "DESC" },
+      relations: { author: true },
+    });
   }
 
   async findById(id: string): Promise<Article> {
-    const article = await repo().findOne({ where: { id } });
+    const article = await repo().findOne({
+      where: { id },
+      relations: { author: true },
+    });
     if (!article) throw new AppError(404, "Article not found");
     return article;
   }
@@ -28,7 +34,8 @@ export class ArticleService {
   async create(dto: CreateArticleDto, adminId: string): Promise<Article> {
     const slug = generateSlug(dto.title);
     await ensureUnique(dto.title, slug);
-    return repo().save(repo().create({ ...dto, slug, author_id: adminId }));
+    const saved = await repo().save(repo().create({ ...dto, slug, author_id: adminId }));
+    return this.findById(saved.id);
   }
 
   async update(id: string, dto: UpdateArticleDto): Promise<Article> {
@@ -40,7 +47,7 @@ export class ArticleService {
     Object.assign(article, dto, { slug });
     const saved = await repo().save(article);
     syncAttachments(previousImages, saved.featured_image);
-    return saved;
+    return this.findById(saved.id);
   }
 
   async remove(id: string): Promise<void> {

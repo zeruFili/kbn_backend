@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { userController } from "../controllers/user.controller";
 import { userUploadMiddleware } from "../middlewares/user-upload.middleware";
@@ -8,14 +8,12 @@ const router = Router();
 
 router.get(
   "/",
-  authenticate,
-  authorize(UserRole.Church, UserRole.Company, UserRole.User, UserRole.Admin, UserRole.Ministry),
+  optionalAuthenticate,
   (req, res, next) => userController.findAll(req, res, next)
 );
 router.get(
   "/:id",
-  authenticate,
-  authorize(UserRole.Church, UserRole.Company, UserRole.User, UserRole.Admin, UserRole.Ministry),
+  optionalAuthenticate,
   (req, res, next) => userController.findById(req, res, next)
 );
 

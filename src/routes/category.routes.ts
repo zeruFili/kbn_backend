@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { categoryController } from "../controllers/category.controller";
 import { createUploadFieldsMiddleware } from "../utils/upload.utils";
@@ -14,30 +14,16 @@ const categoryUploadMiddleware = createUploadFieldsMiddleware({
   subfolder: "categories",
 });
 
-// Listing and retrieval (Available to all authenticated users so they can browse/select categories)
+// Listing and retrieval (Available publicly so visitors/companies can browse/select categories)
 router.get(
   "/",
-  authenticate,
-  authorize(
-    UserRole.Admin,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Church,
-    UserRole.Ministry
-  ),
+  optionalAuthenticate,
   (req, res, next) => categoryController.findAll(req, res, next)
 );
 
 router.get(
   "/:id",
-  authenticate,
-  authorize(
-    UserRole.Admin,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Church,
-    UserRole.Ministry
-  ),
+  optionalAuthenticate,
   (req, res, next) => categoryController.findById(req, res, next)
 );
 

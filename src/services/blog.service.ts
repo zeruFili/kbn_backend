@@ -1,5 +1,7 @@
 import { AppDataSource } from "../config/data-source";
 import { Blog } from "../entities/blog";
+import { Status } from "../enums/event.enum";
+import { UserRole } from "../enums/user-role.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateBlogDto, UpdateBlogDto } from "../validators/blog.dto";
 import { generateSlug } from "../utils/slug.utils";
@@ -15,11 +17,17 @@ async function ensureUnique(title: string, slug: string, id?: string): Promise<v
 }
 
 export class BlogService {
-  list(): Promise<Blog[]> {
-    return repo().find({
-      order: { created_at: "DESC" },
-      relations: { author: true },
-    });
+  async list(currentUser?: { id?: string; role?: UserRole }): Promise<Blog[]> {
+    const isAdmin = currentUser?.role === UserRole.Admin;
+    const query = repo().createQueryBuilder("blog")
+      .leftJoinAndSelect("blog.author", "author")
+      .orderBy("blog.publication_date", "DESC");
+
+    if (!isAdmin) {
+      query.andWhere("blog.status = :status", { status: Status.PUBLISHED });
+    }
+
+    return query.getMany();
   }
 
   async findById(id: string): Promise<Blog> {

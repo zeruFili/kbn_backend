@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { companyController } from "../controllers/company.controller";
 import { createUploadFieldsMiddleware } from "../utils/upload.utils";
@@ -22,14 +22,7 @@ const companyUploadMiddleware = createUploadFieldsMiddleware({
 // Listing and details
 router.get(
   "/",
-  authenticate,
-  authorize(
-    UserRole.Admin,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Church,
-    UserRole.Ministry
-  ),
+  optionalAuthenticate,
   (req, res, next) => companyController.findAll(req, res, next)
 );
 
@@ -43,14 +36,7 @@ router.get("/my-company", authenticate, (req, res, next) =>
 
 router.get(
   "/:id",
-  authenticate,
-  authorize(
-    UserRole.Admin,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Church,
-    UserRole.Ministry
-  ),
+  optionalAuthenticate,
   (req, res, next) => companyController.findById(req, res, next)
 );
 

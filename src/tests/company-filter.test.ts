@@ -212,6 +212,18 @@ async function runCompanyFilterTests() {
     assert.strictEqual(controllerActiveMatch, true);
     console.log("  ✓ Passed: Controller properly forwarded non-admin user and enforced active filtering");
 
+    // -------------------------------------------------------------
+    // 8. Search query includes array_to_string for services
+    // -------------------------------------------------------------
+    console.log("Test 8: Search query includes services in ILIKE match");
+    capturedWhereClauses = [];
+    await companyService.findAll({ search: "Cloud" }, { id: "admin-1", role: UserRole.Admin });
+    const searchMatch = capturedWhereClauses.some((w) =>
+      w.query.includes("array_to_string(company.services, ' ') ILIKE :search")
+    );
+    assert.strictEqual(searchMatch, true);
+    console.log("  ✓ Passed: Search query filters across company.services");
+
     console.log("\nALL COMPANY FILTER TESTS PASSED SUCCESSFULLY! ✓");
   } finally {
     AppDataSource.getRepository = originalGetRepository;

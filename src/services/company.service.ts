@@ -87,7 +87,7 @@ export class CompanyService {
 
     if (options.search) {
       qb.andWhere(
-        "(company.company_name ILIKE :search OR company.email ILIKE :search OR company.owner_primary_contact ILIKE :search OR company.physical_address ILIKE :search OR company.description ILIKE :search)",
+        "(company.company_name ILIKE :search OR company.email ILIKE :search OR company.owner_primary_contact ILIKE :search OR company.physical_address ILIKE :search OR company.description ILIKE :search OR array_to_string(company.services, ' ') ILIKE :search)",
         { search: `%${options.search}%` }
       );
     }
@@ -193,6 +193,7 @@ export class CompanyService {
     const { social_media, status: _st, is_active: _ia, ...companyData } = dto;
     const company = repo().create({
       ...companyData,
+      services: dto.services ?? [],
       status,
       is_active,
       created_by: createdBy,
@@ -311,6 +312,9 @@ export class CompanyService {
 
     const { social_media, status: _st, is_active: _ia, ...updateData } = dto;
     Object.assign(company, updateData);
+    if (dto.services !== undefined) {
+      company.services = dto.services;
+    }
 
     const savedCompany = await repo().save(company);
 

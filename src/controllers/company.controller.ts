@@ -244,6 +244,26 @@ export class CompanyController {
         } catch {}
       }
 
+      let services = req.body.services;
+      if (typeof services === "string") {
+        try {
+          const parsed = JSON.parse(services);
+          if (Array.isArray(parsed)) {
+            services = parsed;
+          } else if (services.trim()) {
+            services = services.split(",").map((s: string) => s.trim()).filter(Boolean);
+          } else {
+            services = [];
+          }
+        } catch {
+          if (services.trim()) {
+            services = services.split(",").map((s: string) => s.trim()).filter(Boolean);
+          } else {
+            services = [];
+          }
+        }
+      }
+
       const payload = {
         ...req.body,
         ...(req.body.name && !req.body.company_name
@@ -265,6 +285,7 @@ export class CompanyController {
         ...(coverPath ? { cover_image: coverPath } : {}),
         ...(licensePath ? { business_license: licensePath } : {}),
         ...(socialMedia !== undefined ? { social_media: socialMedia } : {}),
+        ...(services !== undefined ? { services } : {}),
       };
 
       const dto = await validateContentDto(CreateCompanyDto, payload);
@@ -330,6 +351,26 @@ export class CompanyController {
         finalCover = req.body.cover_image.trim();
       }
 
+      let services = req.body.services;
+      if (typeof services === "string") {
+        try {
+          const parsed = JSON.parse(services);
+          if (Array.isArray(parsed)) {
+            services = parsed;
+          } else if (services.trim()) {
+            services = services.split(",").map((s: string) => s.trim()).filter(Boolean);
+          } else {
+            services = [];
+          }
+        } catch {
+          if (services.trim()) {
+            services = services.split(",").map((s: string) => s.trim()).filter(Boolean);
+          } else {
+            services = [];
+          }
+        }
+      }
+
       const payload = {
         ...req.body,
         ...(req.body.name && !req.body.company_name
@@ -351,6 +392,7 @@ export class CompanyController {
         ...(finalCover !== undefined ? { cover_image: finalCover } : {}),
         ...(licensePath ? { business_license: licensePath } : {}),
         ...(socialMedia !== undefined ? { social_media: socialMedia } : {}),
+        ...(services !== undefined ? { services } : {}),
       };
 
       // Strip non-DTO removal helper fields

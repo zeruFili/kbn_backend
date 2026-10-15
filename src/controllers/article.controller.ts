@@ -12,9 +12,13 @@ import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.u
 import { Status } from "../enums/event.enum";
 
 export class ArticleController {
-  async list(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      res.status(200).json({ success: true, data: await articleService.list() });
+      const authReq = req as AuthRequest;
+      const currentUser = authReq.user
+        ? { id: authReq.user.id, role: authReq.user.role }
+        : undefined;
+      res.status(200).json({ success: true, data: await articleService.list(currentUser) });
     } catch (error) {
       next(error);
     }

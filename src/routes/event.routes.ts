@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate, authorize } from "../middlewares/auth.middleware";
+import { authenticate, authorize, optionalAuthenticate } from "../middlewares/auth.middleware";
 import { UserRole } from "../enums/user-role.enum";
 import { eventController } from "../controllers/event.controller";
 import { eventRegistrationController } from "../controllers/event-registration.controller";
@@ -16,8 +16,8 @@ const eventUploadMiddleware = createUploadFieldsMiddleware({
   subfolder: "event",
 });
 
-router.get("/", authenticate, (req, res, next) => eventController.list(req, res, next));
-router.get("/:id", authenticate, (req, res, next) => eventController.findById(req, res, next));
+router.get("/", optionalAuthenticate, (req, res, next) => eventController.list(req, res, next));
+router.get("/:id", optionalAuthenticate, (req, res, next) => eventController.findById(req, res, next));
 router.post("/", authenticate, authorize(UserRole.Admin), eventUploadMiddleware, (req, res, next) => eventController.create(req, res, next));
 router.patch("/:id", authenticate, authorize(UserRole.Admin), eventUploadMiddleware, (req, res, next) => eventController.update(req, res, next));
 router.put("/:id", authenticate, authorize(UserRole.Admin), eventUploadMiddleware, (req, res, next) => eventController.update(req, res, next));

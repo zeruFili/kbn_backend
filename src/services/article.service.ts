@@ -1,5 +1,7 @@
 import { AppDataSource } from "../config/data-source";
 import { Article } from "../entities/aricle";
+import { Status } from "../enums/event.enum";
+import { UserRole } from "../enums/user-role.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateArticleDto, UpdateArticleDto } from "../validators/article.dto";
 import { generateSlug } from "../utils/slug.utils";
@@ -15,11 +17,17 @@ async function ensureUnique(title: string, slug: string, id?: string): Promise<v
 }
 
 export class ArticleService {
-  list(): Promise<Article[]> {
-    return repo().find({
-      order: { created_at: "DESC" },
-      relations: { author: true },
-    });
+  async list(currentUser?: { id?: string; role?: UserRole }): Promise<Article[]> {
+    const isAdmin = currentUser?.role === UserRole.Admin;
+    const query = repo().createQueryBuilder("article")
+      .leftJoinAndSelect("article.author", "author")
+      .orderBy("article.publication_date", "DESC");
+
+    if (!isAdmin) {
+      query.andWhere("article.status = :status", { status: Status.PUBLISHED });
+    }
+
+    return query.getMany();
   }
 
   async findById(id: string): Promise<Article> {

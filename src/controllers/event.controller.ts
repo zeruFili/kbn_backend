@@ -11,8 +11,14 @@ import {
 import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
 
 export class EventController {
-  async list(_req: Request, res: Response, next: NextFunction): Promise<void> {
-    try { res.status(200).json({ success: true, data: await eventService.list() }); } catch (error) { next(error); }
+  async list(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const authReq = req as AuthRequest;
+      const currentUser = authReq.user
+        ? { id: authReq.user.id, role: authReq.user.role }
+        : undefined;
+      res.status(200).json({ success: true, data: await eventService.list(currentUser) });
+    } catch (error) { next(error); }
   }
   async findById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try { res.status(200).json({ success: true, data: await eventService.findById(contentResourceId(req)) }); } catch (error) { next(error); }

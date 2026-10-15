@@ -52,6 +52,7 @@ function sanitizeUser(user: User): UserDetails {
   return {
     id: user.id,
     fullName: user.full_name,
+    email: user.email,
     role: user.role,
     status: user.status,
     profileImage: user.profileImage ?? null,

@@ -1,5 +1,7 @@
 import { AppDataSource } from "../config/data-source";
 import { Event } from "../entities/event";
+import { Status } from "../enums/event.enum";
+import { UserRole } from "../enums/user-role.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { CreateEventDto, UpdateEventDto } from "../validators/event.dto";
 import { generateSlug } from "../utils/slug.utils";
@@ -15,8 +17,16 @@ async function ensureUnique(title: string, slug: string, id?: string): Promise<v
 }
 
 export class EventService {
-  list(): Promise<Event[]> {
-    return repo().find({ order: { created_at: "DESC" } });
+  async list(currentUser?: { id?: string; role?: UserRole }): Promise<Event[]> {
+    const isAdmin = currentUser?.role === UserRole.Admin;
+    const query = repo().createQueryBuilder("event")
+      .orderBy("event.start_date", "ASC");
+
+    if (!isAdmin) {
+      query.andWhere("event.status = :status", { status: Status.PUBLISHED });
+    }
+
+    return query.getMany();
   }
 
   async findById(id: string): Promise<Event> {

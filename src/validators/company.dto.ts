@@ -65,6 +65,21 @@ export class CreateCompanyDto {
   @IsString()
   description: string;
 
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+      return value.split(",").map((s: string) => s.trim()).filter(Boolean);
+    }
+    return value;
+  })
+  @IsArray()
+  @IsString({ each: true })
+  services?: string[];
+
   @IsString()
   @Length(1, 255)
   business_license: string;
@@ -143,6 +158,21 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+      return value.split(",").map((s: string) => s.trim()).filter(Boolean);
+    }
+    return value;
+  })
+  @IsArray()
+  @IsString({ each: true })
+  services?: string[];
 
   @IsOptional()
   @IsString()

@@ -52,6 +52,9 @@ export class Company {
   @Column({ type: "text" })
   description: string;
 
+  @Column({ type: "text", array: true, default: () => "'{}'" })
+  services: string[];
+
   // Government-issued business license or registration document (URL / path)
   @Column({ type: "varchar", length: 255 })
   business_license: string;

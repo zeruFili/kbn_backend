@@ -47,7 +47,7 @@ export class BlogService {
     Object.assign(blog, dto, { slug });
     const saved = await repo().save(blog);
     syncAttachments(previousImages, saved.featured_image);
-    return saved;
+    return this.findById(saved.id);
   }
 
   async remove(id: string): Promise<void> {

@@ -96,8 +96,8 @@ export class BlogController {
       const payload = {
         ...(req.body.title !== undefined ? { title: req.body.title.trim() } : {}),
         ...(req.body.topic !== undefined ? { topic: req.body.topic.trim() } : {}),
-        ...(req.body.excerpt !== undefined || req.body.description !== undefined
-          ? { excerpt: (req.body.excerpt || req.body.description || "").trim() }
+        ...(req.body.excerpt !== undefined || req.body.description !== undefined || req.body.content !== undefined
+          ? { excerpt: (req.body.excerpt || req.body.description || req.body.content || "").trim() }
           : {}),
         ...(publicationDate !== undefined ? { publication_date: publicationDate } : {}),
         ...(status !== undefined ? { status } : {}),

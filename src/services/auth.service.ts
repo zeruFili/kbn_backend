@@ -1,9 +1,11 @@
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
+import { EntityManager, IsNull } from "typeorm";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
 import { PasswordResetToken } from "../entities/PasswordResetToken";
+import { OtpVerification } from "../entities/otp-verification";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
@@ -18,6 +20,24 @@ import { generateAccessToken } from "../utils/jwt.utils";
 
 const userRepo = () => AppDataSource.getRepository(User);
 const resetTokenRepo = () => AppDataSource.getRepository(PasswordResetToken);
+const otpRepo = () => AppDataSource.getRepository(OtpVerification);
+
+function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length >= 9) {
+    const end = digits.slice(-2);
+    const start = digits.slice(0, 4);
+    return `+${start}******${end}`;
+  }
+  return phone;
+}
+
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!domain) return email;
+  if (local.length <= 2) return `*@${domain}`;
+  return `${local[0]}***${local[local.length - 1]}@${domain}`;
+}
 
 const parsedBcryptCost = Number(process.env.BCRYPT_COST);
 const BCRYPT_COST = Number.isFinite(parsedBcryptCost) && parsedBcryptCost > 0 ? parsedBcryptCost : 12;
@@ -66,7 +86,64 @@ export class AuthService {
     };
   }
 
-  async forgotPassword(identifier: string): Promise<void> {
+  async resolveResetPasswordIdentifier(
+    rawIdentifier: string,
+    manager?: EntityManager
+  ): Promise<string> {
+    const trimmed = rawIdentifier.trim();
+    const isEmail = trimmed.includes("@");
+    const uRepo = manager ? manager.getRepository(User) : userRepo();
+    const oRepo = manager ? manager.getRepository(OtpVerification) : otpRepo();
+
+    if (isEmail) {
+      const user = await uRepo.findOne({ where: { email: trimmed.toLowerCase() } });
+      if (user?.phone) {
+        const normalizedPhone = otpService.normalizeIdentifier(user.phone);
+        const phoneOtp = await oRepo.findOne({
+          where: {
+            identifier: normalizedPhone,
+            purpose: OtpPurpose.RESET_PASSWORD,
+            usedAt: IsNull(),
+          },
+          order: { createdAt: "DESC" },
+        });
+        if (phoneOtp) {
+          return user.phone;
+        }
+      }
+    } else {
+      const normalized = otpService.normalizeIdentifier(trimmed);
+      const user = await uRepo
+        .createQueryBuilder("user")
+        .where("user.phone = :rawPhone OR user.phone = :normalized", {
+          rawPhone: trimmed,
+          normalized,
+        })
+        .getOne();
+
+      if (user?.email) {
+        const phoneOtp = await oRepo.findOne({
+          where: {
+            identifier: normalized,
+            purpose: OtpPurpose.RESET_PASSWORD,
+            usedAt: IsNull(),
+          },
+          order: { createdAt: "DESC" },
+        });
+        if (!phoneOtp) {
+          return user.email;
+        }
+      }
+    }
+
+    return trimmed;
+  }
+
+  async forgotPassword(identifier: string): Promise<{
+    message: string;
+    channel: "sms" | "email";
+    maskedDestination?: string;
+  }> {
     const isEmail = identifier.includes("@");
     let user: User | null = null;
 
@@ -84,35 +161,60 @@ export class AuthService {
     }
 
     if (!user) {
-      return;
+      return {
+        message: "If an account exists with this credential, a verification code has been sent.",
+        channel: isEmail ? "email" : "sms",
+      };
     }
 
-    // 1. Send OTP via SMS module if user has a phone number
-    const targetPhone = user.phone || (!isEmail ? identifier : null);
-    if (targetPhone) {
-      await otpService.generateAndSendOtp(targetPhone, OtpPurpose.RESET_PASSWORD, user.id);
-    }
-
-    // 2. Also generate legacy link token if user has email (for backward compatibility)
+    // 1. Also generate legacy link token if user has email (for backward compatibility)
     if (user.email) {
-      await resetTokenRepo().delete({ userId: user.id, used: false });
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = hashToken(rawToken);
-
-      const resetToken = resetTokenRepo().create({
-        userId: user.id,
-        tokenHash,
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-        used: false,
-      });
-      await resetTokenRepo().save(resetToken);
-
       try {
+        await resetTokenRepo().delete({ userId: user.id, used: false });
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = hashToken(rawToken);
+
+        const resetToken = resetTokenRepo().create({
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+          used: false,
+        });
+        await resetTokenRepo().save(resetToken);
         await emailService.sendPasswordResetEmail(user.email, user.full_name, rawToken);
       } catch (e: any) {
-        // Non-fatal if SMS was sent
+        // Non-fatal
       }
     }
+
+    // 2. Prioritize user's registered phone number for SMS OTP delivery
+    const targetPhone = user.phone ? user.phone.trim() : (!isEmail ? identifier.trim() : null);
+
+    if (targetPhone) {
+      await otpService.generateAndSendOtp(targetPhone, OtpPurpose.RESET_PASSWORD, user.id);
+      const masked = maskPhone(targetPhone);
+      return {
+        message: `Verification code sent via SMS to your registered phone number (${masked}).`,
+        channel: "sms",
+        maskedDestination: masked,
+      };
+    }
+
+    // Fallback: If user only has an email and no registered phone number
+    if (user.email) {
+      await otpService.generateAndSendOtp(user.email, OtpPurpose.RESET_PASSWORD, user.id);
+      const masked = maskEmail(user.email);
+      return {
+        message: `Verification code sent to your registered email (${masked}).`,
+        channel: "email",
+        maskedDestination: masked,
+      };
+    }
+
+    return {
+      message: "If an account exists with this credential, a verification code has been sent.",
+      channel: "sms",
+    };
   }
 
   async resetPasswordWithOtp(
@@ -131,9 +233,15 @@ export class AuthService {
     }
 
     await AppDataSource.transaction(async (transactionalManager) => {
+      // Resolve identifier if user entered email but OTP was sent to their phone via SMS
+      const resolvedIdentifier = await this.resolveResetPasswordIdentifier(
+        identifier,
+        transactionalManager
+      );
+
       // 1. Verify OTP with RESET_PASSWORD purpose inside transaction
       const verifyResult = await otpService.verifyOtp(
-        identifier,
+        resolvedIdentifier,
         otp,
         OtpPurpose.RESET_PASSWORD,
         transactionalManager
@@ -148,18 +256,18 @@ export class AuthService {
       }
 
       if (!user) {
-        const isEmail = identifier.includes("@");
+        const isEmail = resolvedIdentifier.includes("@");
         if (isEmail) {
           user = await transactionalManager
             .getRepository(User)
-            .findOne({ where: { email: identifier.trim().toLowerCase() } });
+            .findOne({ where: { email: resolvedIdentifier.trim().toLowerCase() } });
         } else {
-          const normalized = otpService.normalizeIdentifier(identifier);
+          const normalized = otpService.normalizeIdentifier(resolvedIdentifier);
           user = await transactionalManager
             .getRepository(User)
             .createQueryBuilder("user")
             .where("user.phone = :rawPhone OR user.phone = :normalized", {
-              rawPhone: identifier.trim(),
+              rawPhone: resolvedIdentifier.trim(),
               normalized,
             })
             .getOne();

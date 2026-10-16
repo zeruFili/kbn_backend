@@ -24,6 +24,9 @@ export interface CompanyFilterOptions {
   is_active?: boolean;
   sort_by?: "created_at" | "company_name" | "updated_at";
   sort_order?: "ASC" | "DESC";
+  created_by?: string;
+  user_id?: string;
+  user_email?: string;
 }
 
 export interface PaginatedCompaniesResult {
@@ -105,6 +108,11 @@ export class CompanyService {
       qb.andWhere("company.verification_status = :vStatus", {
         vStatus: options.verification_status,
       });
+    }
+
+    if (options.created_by || options.user_id) {
+      const uid = options.created_by || options.user_id;
+      qb.andWhere("company.created_by = :uid", { uid });
     }
 
     const validSortColumns = ["created_at", "company_name", "updated_at"];

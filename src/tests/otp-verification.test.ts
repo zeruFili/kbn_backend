@@ -9,6 +9,7 @@ import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { otpService } from "../services/otp.service";
 import { authService } from "../services/auth.service";
+import { emailService } from "../services/email.service";
 import { userController } from "../controllers/user.controller";
 import * as smsModule from "../modules/sms";
 
@@ -20,6 +21,7 @@ export async function runOtpVerificationTests() {
   const otpsDb: OtpVerification[] = [];
   const usersDb: User[] = [];
   const sentSmsMessages: { phone: string; message: string }[] = [];
+  const sentEmailOtps: { to: string; otp: string; purpose: string }[] = [];
 
   // Mock sendSms to capture SMS dispatches
   const originalSendSms = smsModule.sendSms;
@@ -30,6 +32,12 @@ export async function runOtpVerificationTests() {
       phone,
       data: { success: true },
     };
+  };
+
+  // Mock emailService.sendOtpEmail to capture email OTP dispatches
+  const originalSendOtpEmail = emailService.sendOtpEmail;
+  (emailService as any).sendOtpEmail = async (to: string, userName: string, otp: string, purpose: string) => {
+    sentEmailOtps.push({ to, otp, purpose });
   };
 
   // Mock repository for OtpVerification
@@ -54,9 +62,17 @@ export async function runOtpVerificationTests() {
     },
     findOne: async (options: { where: any; order?: any }) => {
       const filtered = otpsDb.filter((item) => {
-        return Object.keys(options.where).every(
-          (key) => (item as any)[key] === options.where[key]
-        );
+        return Object.keys(options.where).every((key) => {
+          const expected = options.where[key];
+          const actual = (item as any)[key];
+          if (expected && typeof expected === "object" && ("_type" in expected || "type" in expected)) {
+            const opType = (expected as any)._type || (expected as any).type;
+            if (opType === "isNull") {
+              return actual === null || actual === undefined;
+            }
+          }
+          return actual === expected;
+        });
       });
       if (filtered.length === 0) return null;
       if (options.order?.createdAt === "DESC") {
@@ -578,11 +594,79 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(jovaniOtpRecord.userId, completeBody.data.id, "Jovani user ID must be linked");
     console.log("  ✓ Passed: Registration auto-sends SMS OTP and completes upon verification\n");
 
-    console.log("All 10 OTP Verification Test Suites Passed Successfully! 🚀\n");
+    // -------------------------------------------------------------
+    // Test 11: Password Reset Workflow - Email Lookup Routes to Registered Phone via SMS
+    // -------------------------------------------------------------
+    console.log("Test 11: Password Reset Workflow - Email Lookup Routes to Registered Phone via SMS");
+    const emailUser = mockUserRepo.create({
+      id: "user-email-reset-uuid",
+      full_name: "Email User",
+      email: "emailuser@wase.com",
+      password_hash: await bcrypt.hash("OldPass123!", 10),
+      phone: "0999887766",
+      status: UserStatus.ACTIVE,
+      role: UserRole.User,
+    });
+    usersDb.push(emailUser);
+
+    // Request password reset providing Email -> should look up user and send OTP to phone via SMS!
+    const forgotRes = await authService.forgotPassword("emailuser@wase.com");
+    assert.strictEqual(forgotRes.channel, "sms");
+    assert.ok(forgotRes.message.includes("SMS"));
+
+    const emailUserSms = sentSmsMessages.find((s) => s.phone === "251999887766");
+    assert.ok(emailUserSms, "SMS OTP should have been delivered to user's registered phone");
+    const emailUserOtpMatch = emailUserSms.message.match(/\b\d{6}\b/);
+    const emailUserOtp = emailUserOtpMatch![0];
+
+    // Reset password using the Email (as identifier) + the SMS OTP!
+    await authService.resetPasswordWithOtp(
+      "emailuser@wase.com",
+      emailUserOtp,
+      "SuperSecret99!",
+      "SuperSecret99!"
+    );
+
+    const isUpdatedPassValid = await bcrypt.compare("SuperSecret99!", emailUser.password_hash);
+    assert.strictEqual(isUpdatedPassValid, true, "Password must be updated when user resets using email and SMS OTP");
+    console.log("  ✓ Passed: Email lookup successfully sends OTP to registered phone via SMS and resets password\n");
+
+    // -------------------------------------------------------------
+    // Test 12: Password Reset Fallback to Email When User Has No Phone
+    // -------------------------------------------------------------
+    console.log("Test 12: Password Reset Fallback to Email When User Has No Phone");
+    const noPhoneUser = mockUserRepo.create({
+      id: "user-no-phone-uuid",
+      full_name: "No Phone User",
+      email: "nophone@wase.com",
+      password_hash: await bcrypt.hash("OldPass123!", 10),
+      phone: null as any,
+      status: UserStatus.ACTIVE,
+      role: UserRole.User,
+    });
+    usersDb.push(noPhoneUser);
+
+    const fallbackRes = await authService.forgotPassword("nophone@wase.com");
+    assert.strictEqual(fallbackRes.channel, "email");
+    const fallbackEmail = sentEmailOtps.find((e) => e.to === "nophone@wase.com");
+    assert.ok(fallbackEmail, "Email OTP should be dispatched as fallback when user has no phone");
+
+    await authService.resetPasswordWithOtp(
+      "nophone@wase.com",
+      fallbackEmail.otp,
+      "FallbackSecret99!",
+      "FallbackSecret99!"
+    );
+    const isFallbackPassValid = await bcrypt.compare("FallbackSecret99!", noPhoneUser.password_hash);
+    assert.strictEqual(isFallbackPassValid, true, "Password must be updated when verified via Email fallback");
+    console.log("  ✓ Passed: Fallback to Email OTP functions correctly when user has no phone\n");
+
+    console.log("All 12 OTP Verification Test Suites Passed Successfully! 🚀\n");
   } finally {
     (AppDataSource as any).getRepository = originalGetRepository;
     (AppDataSource as any).transaction = originalTransaction;
     (smsModule as any).sendSms = originalSendSms;
+    (emailService as any).sendOtpEmail = originalSendOtpEmail;
   }
 }
 

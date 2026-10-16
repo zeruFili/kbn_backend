@@ -151,6 +151,11 @@ export class CompanyController {
         ? { id: authReq.user.id, role: authReq.user.role, email: authReq.user.email }
         : undefined;
 
+      const created_by = (req.query.created_by || req.query.user_id) as
+        | string
+        | undefined;
+      const user_email = req.query.user_email as string | undefined;
+
       const result = await companyService.findAll(
         {
           page,
@@ -162,6 +167,9 @@ export class CompanyController {
           is_active,
           sort_by,
           sort_order,
+          created_by,
+          user_id: created_by,
+          user_email,
         },
         currentUser
       );

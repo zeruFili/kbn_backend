@@ -6,6 +6,7 @@ import { OtpVerification } from "../entities/otp-verification";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { AppError } from "../middlewares/error.middleware";
 import { sendSms, smsSender, isSmsConfigured } from "../modules/sms";
+import { emailService } from "./email.service";
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES) || 10;
 const OTP_EXPIRY_MS = OTP_EXPIRY_MINUTES * 60 * 1000;
@@ -108,22 +109,32 @@ export class OtpService {
     });
     await repo.save(otpRecord);
 
-    // 5. Send OTP via SMS Module
-    const smsMessage = `Your Wase verification code is ${plainOtp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.`;
-    try {
-      await sendSms(identifier, smsMessage);
-    } catch (smsErr: any) {
-      console.warn(`[OtpService] SMS send notice for ${identifier}: ${smsErr.message}`);
-      if (process.env.NODE_ENV === "production" && isSmsConfigured()) {
-        throw new AppError(502, "Failed to deliver SMS verification code. Please try again later.");
+    // 5. Deliver OTP via Email or SMS Module
+    const isEmail = identifier.includes("@");
+    if (isEmail) {
+      try {
+        await emailService.sendOtpEmail(identifier, "User", plainOtp, purpose);
+      } catch (emailErr: any) {
+        console.warn(`[OtpService] Email send notice for ${identifier}: ${emailErr.message}`);
+      }
+    } else {
+      const smsMessage = `Your Wase verification code is ${plainOtp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.`;
+      try {
+        await sendSms(identifier, smsMessage);
+      } catch (smsErr: any) {
+        console.warn(`[OtpService] SMS send notice for ${identifier}: ${smsErr.message}`);
+        if (process.env.NODE_ENV === "production" && isSmsConfigured()) {
+          throw new AppError(502, "Failed to deliver SMS verification code. Please try again later.");
+        }
       }
     }
 
+    const channel = isEmail ? "email" : "SMS";
     return {
       success: true,
       identifier,
       expiresAt,
-      message: "Verification code sent successfully via SMS",
+      message: `Verification code sent successfully via ${channel}`,
       ...(process.env.NODE_ENV === "test" ? { otpForTesting: plainOtp } : {}),
     };
   }

@@ -185,7 +185,12 @@ export class AuthController {
         return;
       }
 
-      const result = await otpService.verifyOtp(dto.identifier, dto.otp, dto.purpose);
+      let resolvedIdentifier = dto.identifier;
+      if (dto.purpose === OtpPurpose.RESET_PASSWORD) {
+        resolvedIdentifier = await authService.resolveResetPasswordIdentifier(dto.identifier);
+      }
+
+      const result = await otpService.verifyOtp(resolvedIdentifier, dto.otp, dto.purpose);
       res.status(200).json({
         success: true,
         message: result.message,
@@ -216,10 +221,16 @@ export class AuthController {
         return;
       }
 
-      await authService.forgotPassword(identifier.trim());
+      const result = await authService.forgotPassword(identifier.trim());
       res.status(200).json({
         success: true,
-        message: "If an account exists with this credential, a verification code has been sent.",
+        message: result.message,
+        data: result.maskedDestination
+          ? {
+              channel: result.channel,
+              maskedDestination: result.maskedDestination,
+            }
+          : undefined,
       });
     } catch (err) {
       console.error("Forgot password error:", err);

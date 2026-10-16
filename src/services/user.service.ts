@@ -47,6 +47,7 @@ interface UpdateUserInput {
   professionalExperience?: string;
   password?: string;
   status?: UserStatus;
+  role?: UserRole;
   profileImage?: string | null;
 }
 
@@ -83,20 +84,24 @@ export class UserService {
     is_active?: boolean,
     search?: string,
     status?: UserStatus,
-    currentUser?: CurrentUser
+    currentUser?: CurrentUser,
+    sort_by?: string,
+    sort_order?: string,
+    include_admin?: boolean
   ): Promise<PaginatedResult<AdminUserOutput>> {
     const p = Math.max(1, page);
     const l = Math.min(100, Math.max(1, limit));
     const where: FindOptionsWhere<User> = {};
 
+    const isAdmin = currentUser?.role === UserRole.Admin;
+
     // When fetching all users without a specific role filter, exclude the admin user account
+    // unless the current user is an admin requesting include_admin
     if (role) {
       where.role = role;
-    } else {
+    } else if (!isAdmin || !include_admin) {
       where.role = Not(UserRole.Admin);
     }
-
-    const isAdmin = currentUser?.role === UserRole.Admin;
 
     if (!isAdmin) {
       // Non-admin users can ONLY retrieve active users
@@ -118,15 +123,31 @@ export class UserService {
     if (search) {
       whereConditions.push(
         { ...where, email: ILike(`%${search}%`) },
-        { ...where, full_name: ILike(`%${search}%`) }
+        { ...where, full_name: ILike(`%${search}%`) },
+        { ...where, phone: ILike(`%${search}%`) }
       );
     } else {
       whereConditions.push(where);
     }
 
+    const sortField = sort_by || "created_at";
+    const sortDirection: "ASC" | "DESC" = sort_order?.toUpperCase() === "ASC" ? "ASC" : "DESC";
+    const order: any = {};
+    if (sortField === "full_name" || sortField === "name") {
+      order.full_name = sortDirection;
+    } else if (sortField === "email") {
+      order.email = sortDirection;
+    } else if (sortField === "role") {
+      order.role = sortDirection;
+    } else if (sortField === "status") {
+      order.status = sortDirection;
+    } else {
+      order.created_at = sortDirection;
+    }
+
     const [users, total] = await userRepo().findAndCount({
       where: whereConditions,
-      order: { created_at: "DESC" },
+      order,
       skip: (p - 1) * l,
       take: l,
     });
@@ -141,6 +162,7 @@ export class UserService {
       },
     };
   }
+
 
   async findById(id: string): Promise<UserDetails> {
     const user = await getUserDetails(id);
@@ -253,6 +275,15 @@ export class UserService {
       }
       user.status = dto.status;
       user.is_active = dto.status === UserStatus.ACTIVE;
+    }
+
+    if (dto.role !== undefined) {
+      if (currentUser && currentUser.role !== UserRole.Admin) {
+        throw new AppError(403, "Forbidden: Only administrators can update user role");
+      }
+      if (id !== currentUser?.id) {
+        user.role = dto.role;
+      }
     }
 
     if (dto.profileImage !== undefined) {

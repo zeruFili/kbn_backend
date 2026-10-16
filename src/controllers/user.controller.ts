@@ -59,21 +59,39 @@ export class UserController {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
-      const role = req.query.role as UserRole | undefined;
-      const status = req.query.status as UserStatus | undefined;
+
+      let role: UserRole | undefined = undefined;
+      if (req.query.role) {
+        const rawRole = (req.query.role as string).trim().toLowerCase();
+        if (rawRole !== "all" && rawRole !== "") {
+          const matched = Object.values(UserRole).find((r) => r.toLowerCase() === rawRole);
+          if (!matched) {
+            res.status(400).json({ success: false, message: `Invalid role: ${req.query.role}` });
+            return;
+          }
+          role = matched;
+        }
+      }
+
+      let status: UserStatus | undefined = undefined;
+      if (req.query.status) {
+        const rawStatus = (req.query.status as string).trim().toLowerCase();
+        if (rawStatus !== "all" && rawStatus !== "") {
+          const matched = Object.values(UserStatus).find((s) => s.toLowerCase() === rawStatus);
+          if (!matched) {
+            res.status(400).json({ success: false, message: `Invalid status: ${req.query.status}` });
+            return;
+          }
+          status = matched;
+        }
+      }
+
       const isActiveParam = req.query.is_active as string | undefined;
       const is_active = isActiveParam !== undefined ? isActiveParam === "true" : undefined;
       const search = req.query.search as string | undefined;
-
-      if (role && !Object.values(UserRole).includes(role)) {
-        res.status(400).json({ success: false, message: `Invalid role: ${role}` });
-        return;
-      }
-
-      if (status && !Object.values(UserStatus).includes(status)) {
-        res.status(400).json({ success: false, message: `Invalid status: ${status}` });
-        return;
-      }
+      const sort_by = req.query.sort_by as string | undefined;
+      const sort_order = req.query.sort_order as string | undefined;
+      const include_admin = req.query.include_admin === "true" || req.query.includeAdmin === "true";
 
       const currentUser = req.user
         ? { id: req.user.id, role: req.user.role }
@@ -86,9 +104,13 @@ export class UserController {
         is_active,
         search,
         status,
-        currentUser
+        currentUser,
+        sort_by,
+        sort_order,
+        include_admin
       );
       res.status(200).json({ success: true, ...result });
+
     } catch (error) {
       next(error);
     }

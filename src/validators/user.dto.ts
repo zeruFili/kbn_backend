@@ -2,7 +2,7 @@ import {
   IsString, IsIn, IsEnum, IsOptional, IsEmail, IsBoolean, Length,
   MinLength, Matches, IsInt, Min, Max, IsUrl, ValidateIf, IsDate,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 
@@ -90,6 +90,7 @@ export class CreateUserDto {
 
 export class UpdateUserDto {
   @IsOptional()
+  @Transform(({ value, obj }) => value ?? obj?.fullName ?? obj?.name)
   @IsString()
   @Length(1, 255)
   full_name?: string;
@@ -100,10 +101,17 @@ export class UpdateUserDto {
   email?: string;
 
   @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
   @IsEnum(UserStatus)
   status?: UserStatus;
 
   @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
+  @IsEnum(UserRole)
+  role?: UserRole;
+
+  @IsOptional()
+  @Transform(({ value, obj }) => value ?? obj?.phone_number)
   @IsString()
   phone?: string;
 
@@ -144,16 +152,25 @@ export class UpdateUserDto {
 }
 
 export class UpdateUserRoleDto {
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
   @IsEnum(UserRole)
   role: UserRole;
 }
 
 export class UpdateUserStatusDto {
   @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
   @IsEnum(UserStatus)
   status?: UserStatus;
 
   @IsOptional()
+  @Transform(({ value }) =>
+    value === "true" || value === true
+      ? true
+      : value === "false" || value === false
+      ? false
+      : value
+  )
   @IsBoolean()
   is_active?: boolean;
 
@@ -167,3 +184,4 @@ export class UpdateUserStatusDto {
   @IsDate()
   expiration_date?: Date | null;
 }
+

@@ -4,20 +4,28 @@ import { UserStatus } from "../enums/user-status.enum";
 export interface SafeUserOutput {
   id: string;
   full_name: string;
+  fullName?: string;
   email: string;
   role: string;
   status: UserStatus;
   profileImage: string | null;
+  profile_image?: string | null;
+  avatar?: string | null;
   phone: string | null;
   website: string | null;
   education: string | null;
   achievement: string | null;
   professional_experience: string | null;
+  created_at?: Date | null;
+  createdAt?: Date | null;
+  registeredAt?: string | null;
+  updated_at?: Date | null;
 }
 
 export interface AdminUserOutput {
   id: string;
   full_name: string;
+  fullName: string;
   email: string;
   role: string;
   phone: string | null;
@@ -29,31 +37,47 @@ export interface AdminUserOutput {
   status: UserStatus;
   is_active: boolean;
   profileImage: string | null;
+  profile_image: string | null;
+  avatar: string | null;
+  created_at: Date | null;
+  createdAt: Date | null;
+  registeredAt: string | null;
+  updated_at: Date | null;
+  updatedAt: Date | null;
 }
 
 export function pickSafeUserFields(user: User | null | undefined): SafeUserOutput | null {
   if (!user) return null;
+  const image = user.profileImage ?? null;
   return {
     id: user.id,
     full_name: user.full_name,
+    fullName: user.full_name,
     email: user.email,
     role: user.role,
     status: user.status,
-    profileImage: user.profileImage ?? null,
+    profileImage: image,
+    profile_image: image,
+    avatar: image,
     phone: user.phone ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,
     professional_experience: user.professional_experience ?? null,
+    created_at: user.created_at ?? null,
+    createdAt: user.created_at ?? null,
+    registeredAt: user.created_at ? user.created_at.toISOString() : null,
+    updated_at: user.updated_at ?? null,
   };
 }
 
-
 export function pickAdminUserFields(user: User | null | undefined): AdminUserOutput | null {
   if (!user) return null;
+  const image = user.profileImage ?? null;
   return {
     id: user.id,
     full_name: user.full_name,
+    fullName: user.full_name,
     email: user.email,
     role: user.role,
     phone: user.phone ?? null,
@@ -64,6 +88,13 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
     last_login_at: user.last_login_at ?? null,
     status: user.status,
     is_active: user.is_active,
-    profileImage: user.profileImage ?? null,
+    profileImage: image,
+    profile_image: image,
+    avatar: image,
+    created_at: user.created_at ?? null,
+    createdAt: user.created_at ?? null,
+    registeredAt: user.created_at ? user.created_at.toISOString() : null,
+    updated_at: user.updated_at ?? null,
+    updatedAt: user.updated_at ?? null,
   };
 }

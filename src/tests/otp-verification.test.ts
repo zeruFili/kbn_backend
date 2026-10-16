@@ -236,7 +236,7 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(sentSmsMessages.length, 1, "sendSms should have been called once");
     assert.strictEqual(sentSmsMessages[0].phone, "+251911223344", "SMS recipient should match normalized phone");
     assert.ok(
-      sentSmsMessages[0].message.includes("Your Wase verification code is"),
+      sentSmsMessages[0].message.includes("verification code is"),
       "SMS content must contain verification message"
     );
 

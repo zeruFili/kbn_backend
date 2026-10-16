@@ -99,12 +99,14 @@ export class AuthService {
       const user = await uRepo.findOne({ where: { email: trimmed.toLowerCase() } });
       if (user?.phone) {
         const normalizedPhone = otpService.normalizeIdentifier(user.phone);
+        const altPhone = normalizedPhone.startsWith("+")
+          ? normalizedPhone.slice(1)
+          : `+${normalizedPhone}`;
         const phoneOtp = await oRepo.findOne({
-          where: {
-            identifier: normalizedPhone,
-            purpose: OtpPurpose.RESET_PASSWORD,
-            usedAt: IsNull(),
-          },
+          where: [
+            { identifier: normalizedPhone, purpose: OtpPurpose.RESET_PASSWORD, usedAt: IsNull() },
+            { identifier: altPhone, purpose: OtpPurpose.RESET_PASSWORD, usedAt: IsNull() },
+          ],
           order: { createdAt: "DESC" },
         });
         if (phoneOtp) {
@@ -113,21 +115,28 @@ export class AuthService {
       }
     } else {
       const normalized = otpService.normalizeIdentifier(trimmed);
+      const withPlus = normalized.startsWith("+") ? normalized : `+${normalized}`;
+      const withoutPlus = normalized.replace(/^\+/, "");
       const user = await uRepo
         .createQueryBuilder("user")
-        .where("user.phone = :rawPhone OR user.phone = :normalized", {
-          rawPhone: trimmed,
-          normalized,
-        })
+        .where(
+          "user.phone = :rawPhone OR user.phone = :normalized OR user.phone = :withPlus OR user.phone = :withoutPlus",
+          {
+            rawPhone: trimmed,
+            normalized,
+            withPlus,
+            withoutPlus,
+          }
+        )
         .getOne();
 
       if (user?.email) {
+        const altNormalized = normalized.startsWith("+") ? normalized.slice(1) : `+${normalized}`;
         const phoneOtp = await oRepo.findOne({
-          where: {
-            identifier: normalized,
-            purpose: OtpPurpose.RESET_PASSWORD,
-            usedAt: IsNull(),
-          },
+          where: [
+            { identifier: normalized, purpose: OtpPurpose.RESET_PASSWORD, usedAt: IsNull() },
+            { identifier: altNormalized, purpose: OtpPurpose.RESET_PASSWORD, usedAt: IsNull() },
+          ],
           order: { createdAt: "DESC" },
         });
         if (!phoneOtp) {
@@ -151,12 +160,19 @@ export class AuthService {
       user = await userRepo().findOne({ where: { email: identifier.trim().toLowerCase() } });
     } else {
       const normalized = otpService.normalizeIdentifier(identifier);
+      const withPlus = normalized.startsWith("+") ? normalized : `+${normalized}`;
+      const withoutPlus = normalized.replace(/^\+/, "");
       user = await userRepo()
         .createQueryBuilder("user")
-        .where("user.phone = :rawPhone OR user.phone = :normalized", {
-          rawPhone: identifier.trim(),
-          normalized,
-        })
+        .where(
+          "user.phone = :rawPhone OR user.phone = :normalized OR user.phone = :withPlus OR user.phone = :withoutPlus",
+          {
+            rawPhone: identifier.trim(),
+            normalized,
+            withPlus,
+            withoutPlus,
+          }
+        )
         .getOne();
     }
 
@@ -263,13 +279,20 @@ export class AuthService {
             .findOne({ where: { email: resolvedIdentifier.trim().toLowerCase() } });
         } else {
           const normalized = otpService.normalizeIdentifier(resolvedIdentifier);
+          const withPlus = normalized.startsWith("+") ? normalized : `+${normalized}`;
+          const withoutPlus = normalized.replace(/^\+/, "");
           user = await transactionalManager
             .getRepository(User)
             .createQueryBuilder("user")
-            .where("user.phone = :rawPhone OR user.phone = :normalized", {
-              rawPhone: resolvedIdentifier.trim(),
-              normalized,
-            })
+            .where(
+              "user.phone = :rawPhone OR user.phone = :normalized OR user.phone = :withPlus OR user.phone = :withoutPlus",
+              {
+                rawPhone: resolvedIdentifier.trim(),
+                normalized,
+                withPlus,
+                withoutPlus,
+              }
+            )
             .getOne();
         }
       }

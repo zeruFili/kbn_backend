@@ -6,14 +6,14 @@ import { UserStatus } from "../enums/user-status.enum";
 export interface UserDetails {
   id: string;
   fullName: string;
-  full_name: string;
+  full_name?: string;
   email: string;
   role: UserRole;
   status: UserStatus;
-  is_active: boolean;
+  is_active?: boolean;
   profileImage: string | null;
-  profile_image: string | null;
-  avatar: string | null;
+  profile_image?: string | null;
+  avatar?: string | null;
   phone: string | null;
   website: string | null;
   education: string | null;

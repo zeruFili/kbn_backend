@@ -5,7 +5,7 @@ import { AppDataSource } from "../config/data-source";
 import { OtpVerification } from "../entities/otp-verification";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { AppError } from "../middlewares/error.middleware";
-import { sendSms, smsSender, isSmsConfigured } from "../modules/sms";
+import { sendEthioSms, ethioSmsSender, isEthioSmsConfigured } from "../modules/ethiosms";
 import { emailService } from "./email.service";
 
 const OTP_EXPIRY_MINUTES = Number(process.env.OTP_EXPIRY_MINUTES) || 10;
@@ -20,12 +20,12 @@ export class OtpService {
 
   /**
    * Normalizes an identifier (phone number or email).
-   * For Ethiopian mobile numbers, normalizes to 2519... / 2517...
+   * For Ethiopian mobile numbers, normalizes to E.164 (+2519... / +2517...) using EthioSMS.
    */
   public normalizeIdentifier(identifier: string): string {
     if (!identifier) return "";
     const trimmed = identifier.trim();
-    const normalizedPhone = smsSender.normalizePhone(trimmed);
+    const normalizedPhone = ethioSmsSender.normalizePhone(trimmed);
     if (normalizedPhone) {
       return normalizedPhone;
     }
@@ -35,7 +35,7 @@ export class OtpService {
   /**
    * Generates a secure random 6-digit numeric OTP, hashes it,
    * invalidates prior active codes for (identifier, purpose),
-   * persists the record to the database, and dispatches via SMS.
+   * persists the record to the database, and dispatches via EthioSMS / SMSHub.
    */
   async generateAndSendOtp(
     rawIdentifier: string,
@@ -54,14 +54,18 @@ export class OtpService {
       throw new AppError(400, "A valid phone number or identifier is required.");
     }
 
+    const altIdentifier = identifier.startsWith("+")
+      ? identifier.slice(1)
+      : `+${identifier}`;
+
     const repo = this.getRepo(manager);
 
     // 1. Check rate limit / cooldown: Prevent spamming OTP generation
     const latestActive = await repo.findOne({
-      where: {
-        identifier,
-        purpose,
-      },
+      where: [
+        { identifier, purpose },
+        { identifier: altIdentifier, purpose },
+      ],
       order: {
         createdAt: "DESC",
       },
@@ -85,11 +89,15 @@ export class OtpService {
       .createQueryBuilder()
       .update(OtpVerification)
       .set({ expiresAt: new Date(now - 1000) })
-      .where("identifier = :identifier AND purpose = :purpose AND used_at IS NULL AND expires_at > :nowDate", {
-        identifier,
-        purpose,
-        nowDate: new Date(now),
-      })
+      .where(
+        "(identifier = :identifier OR identifier = :altIdentifier) AND purpose = :purpose AND used_at IS NULL AND expires_at > :nowDate",
+        {
+          identifier,
+          altIdentifier,
+          purpose,
+          nowDate: new Date(now),
+        }
+      )
       .execute();
 
     // 3. Generate secure 6-digit numeric OTP and bcrypt hash
@@ -109,7 +117,7 @@ export class OtpService {
     });
     await repo.save(otpRecord);
 
-    // 5. Deliver OTP via Email or SMS Module
+    // 5. Deliver OTP via Email or EthioSMS Module
     const isEmail = identifier.includes("@");
     if (isEmail) {
       try {
@@ -118,12 +126,12 @@ export class OtpService {
         console.warn(`[OtpService] Email send notice for ${identifier}: ${emailErr.message}`);
       }
     } else {
-      const smsMessage = `Your Wase verification code is ${plainOtp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.`;
+      const smsMessage = `Your Kingdom Builders Hub verification code is ${plainOtp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code with anyone.`;
       try {
-        await sendSms(identifier, smsMessage);
+        await sendEthioSms(identifier, smsMessage);
       } catch (smsErr: any) {
-        console.warn(`[OtpService] SMS send notice for ${identifier}: ${smsErr.message}`);
-        if (process.env.NODE_ENV === "production" && isSmsConfigured()) {
+        console.warn(`[OtpService] EthioSMS send notice for ${identifier}: ${smsErr.message}`);
+        if (process.env.NODE_ENV === "production" && isEthioSmsConfigured()) {
           throw new AppError(502, "Failed to deliver SMS verification code. Please try again later.");
         }
       }
@@ -166,12 +174,16 @@ export class OtpService {
     const trimmedOtp = plainOtp.trim();
     const repo = this.getRepo(manager);
 
+    const altIdentifier = identifier.startsWith("+")
+      ? identifier.slice(1)
+      : `+${identifier}`;
+
     // 1. Fetch latest OTP record for this identifier and purpose
     const record = await repo.findOne({
-      where: {
-        identifier,
-        purpose,
-      },
+      where: [
+        { identifier, purpose },
+        { identifier: altIdentifier, purpose },
+      ],
       order: {
         createdAt: "DESC",
       },

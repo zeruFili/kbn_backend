@@ -61,18 +61,29 @@ const parsedBcryptCost = Number(process.env.BCRYPT_COST);
 const BCRYPT_COST = Number.isFinite(parsedBcryptCost) && parsedBcryptCost > 0 ? parsedBcryptCost : 12;
 
 function sanitizeUser(user: User): UserDetails {
+  const image = user.profileImage ?? null;
   return {
     id: user.id,
     fullName: user.full_name,
+    full_name: user.full_name,
     email: user.email,
     role: user.role,
     status: user.status,
-    profileImage: user.profileImage ?? null,
+    is_active: user.is_active,
+    profileImage: image,
+    profile_image: image,
+    avatar: image,
     phone: user.phone ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,
     professional_experience: user.professional_experience ?? null,
+    last_login_at: user.last_login_at ?? null,
+    created_at: user.created_at ?? null,
+    createdAt: user.created_at ?? null,
+    registeredAt: user.created_at ? user.created_at.toISOString() : null,
+    updated_at: user.updated_at ?? null,
+    updatedAt: user.updated_at ?? null,
   };
 }
 

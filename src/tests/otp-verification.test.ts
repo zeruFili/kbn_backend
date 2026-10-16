@@ -12,6 +12,7 @@ import { authService } from "../services/auth.service";
 import { emailService } from "../services/email.service";
 import { userController } from "../controllers/user.controller";
 import * as smsModule from "../modules/sms";
+import * as ethioSmsModule from "../modules/ethiosms";
 
 export async function runOtpVerificationTests() {
   console.log("=================================================");
@@ -23,16 +24,23 @@ export async function runOtpVerificationTests() {
   const sentSmsMessages: { phone: string; message: string }[] = [];
   const sentEmailOtps: { to: string; otp: string; purpose: string }[] = [];
 
-  // Mock sendSms to capture SMS dispatches
+  // Mock sendSms and sendEthioSms to capture SMS dispatches
   const originalSendSms = smsModule.sendSms;
-  (smsModule as any).sendSms = async (phone: string, message: string) => {
+  const originalSendEthioSms = ethioSmsModule.sendEthioSms;
+
+  const mockSmsSender = async (phone: string, message: string) => {
     sentSmsMessages.push({ phone, message });
     return {
-      status: "sent",
+      status: "sent" as const,
       phone,
       data: { success: true },
     };
   };
+
+  (smsModule as any).sendSms = mockSmsSender;
+  (ethioSmsModule as any).sendEthioSms = mockSmsSender;
+  (ethioSmsModule as any).sendSms = mockSmsSender;
+  (ethioSmsModule.ethioSmsSender as any).send = mockSmsSender;
 
   // Mock emailService.sendOtpEmail to capture email OTP dispatches
   const originalSendOtpEmail = emailService.sendOtpEmail;
@@ -61,9 +69,9 @@ export async function runOtpVerificationTests() {
       return entity;
     },
     findOne: async (options: { where: any; order?: any }) => {
-      const filtered = otpsDb.filter((item) => {
-        return Object.keys(options.where).every((key) => {
-          const expected = options.where[key];
+      const matchCondition = (item: OtpVerification, cond: any) => {
+        return Object.keys(cond).every((key) => {
+          const expected = cond[key];
           const actual = (item as any)[key];
           if (expected && typeof expected === "object" && ("_type" in expected || "type" in expected)) {
             const opType = (expected as any)._type || (expected as any).type;
@@ -73,6 +81,13 @@ export async function runOtpVerificationTests() {
           }
           return actual === expected;
         });
+      };
+
+      const filtered = otpsDb.filter((item) => {
+        if (Array.isArray(options.where)) {
+          return options.where.some((cond) => matchCondition(item, cond));
+        }
+        return matchCondition(item, options.where);
       });
       if (filtered.length === 0) return null;
       if (options.order?.createdAt === "DESC") {
@@ -101,10 +116,11 @@ export async function runOtpVerificationTests() {
         where: (condition: string, params: any) => {
           if (condition.includes("id = :id AND used_at IS NULL")) {
             whereConditions.push((item) => item.id === params.id && item.usedAt === null);
-          } else if (condition.includes("identifier = :identifier AND purpose = :purpose")) {
+          } else if (condition.includes("purpose = :purpose") && condition.includes("expires_at > :nowDate")) {
             whereConditions.push(
               (item) =>
-                item.identifier === params.identifier &&
+                (item.identifier === params.identifier ||
+                  item.identifier === params.altIdentifier) &&
                 item.purpose === params.purpose &&
                 item.usedAt === null &&
                 new Date(item.expiresAt) > params.nowDate
@@ -162,9 +178,13 @@ export async function runOtpVerificationTests() {
           if (params.email) {
             filtered = filtered.filter((u) => u.email === params.email);
           }
-          if (params.rawPhone || params.normalized) {
+          if (params.rawPhone || params.normalized || params.withPlus || params.withoutPlus) {
             filtered = filtered.filter(
-              (u) => u.phone === params.rawPhone || u.phone === params.normalized
+              (u) =>
+                u.phone === params.rawPhone ||
+                u.phone === params.normalized ||
+                u.phone === params.withPlus ||
+                u.phone === params.withoutPlus
             );
           }
           return qb;
@@ -211,10 +231,10 @@ export async function runOtpVerificationTests() {
     const sendResult = await otpService.generateAndSendOtp(testPhone, OtpPurpose.REGISTER);
 
     assert.strictEqual(sendResult.success, true, "OTP send should return success: true");
-    assert.strictEqual(sendResult.identifier, "251911223344", "Identifier should be normalized to Ethiopian standard");
+    assert.strictEqual(sendResult.identifier, "+251911223344", "Identifier should be normalized to Ethiopian standard");
     assert.ok(sendResult.expiresAt > new Date(), "ExpiresAt must be in the future");
     assert.strictEqual(sentSmsMessages.length, 1, "sendSms should have been called once");
-    assert.strictEqual(sentSmsMessages[0].phone, "251911223344", "SMS recipient should match normalized phone");
+    assert.strictEqual(sentSmsMessages[0].phone, "+251911223344", "SMS recipient should match normalized phone");
     assert.ok(
       sentSmsMessages[0].message.includes("Your Wase verification code is"),
       "SMS content must contain verification message"
@@ -223,7 +243,7 @@ export async function runOtpVerificationTests() {
     // Verify DB record
     const savedRecord = otpsDb[0];
     assert.ok(savedRecord, "OTP record must be saved in database");
-    assert.strictEqual(savedRecord.identifier, "251911223344");
+    assert.strictEqual(savedRecord.identifier, "+251911223344");
     assert.strictEqual(savedRecord.purpose, OtpPurpose.REGISTER);
     assert.strictEqual(savedRecord.attempts, 0);
     assert.strictEqual(savedRecord.usedAt, null);
@@ -438,7 +458,7 @@ export async function runOtpVerificationTests() {
     assert.ok(regResult.accessToken, "Registration must return access token");
     assert.strictEqual(regResult.user.email, "builder@wase.com");
 
-    const regOtpRecord = otpsDb.find((o) => o.identifier === "251944556677");
+    const regOtpRecord = otpsDb.find((o) => o.identifier === "+251944556677");
     assert.ok(regOtpRecord, "Registration OTP record must exist");
     assert.ok(regOtpRecord.usedAt !== null, "Registration OTP must be marked as used");
     assert.strictEqual(
@@ -467,7 +487,7 @@ export async function runOtpVerificationTests() {
     // Request password reset OTP via SMS
     await authService.forgotPassword(resetUserPhone);
     const resetSms = sentSmsMessages[sentSmsMessages.length - 1];
-    assert.strictEqual(resetSms.phone, "251955667788");
+    assert.strictEqual(resetSms.phone, "+251955667788");
     const resetOtpMatch = resetSms.message.match(/\b\d{6}\b/);
     const resetOtp = resetOtpMatch![0];
 
@@ -500,7 +520,7 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(isNewPasswordValid, true, "User password must be updated to new password");
 
     const resetOtpRecord = otpsDb.find(
-      (o) => o.identifier === "251955667788" && o.purpose === OtpPurpose.RESET_PASSWORD
+      (o) => o.identifier === "+251955667788" && o.purpose === OtpPurpose.RESET_PASSWORD
     );
     assert.ok(resetOtpRecord, "Reset OTP record must exist");
     assert.ok(resetOtpRecord.usedAt !== null, "Reset OTP must be marked as used");
@@ -546,7 +566,7 @@ export async function runOtpVerificationTests() {
       "Response message must indicate SMS dispatch"
     );
 
-    const jovaniSms = sentSmsMessages.find((s) => s.phone === "251911002233");
+    const jovaniSms = sentSmsMessages.find((s) => s.phone === "+251911002233");
     assert.ok(jovaniSms, "SMS should have been delivered to Jovani's phone");
     const jovaniOtpMatch = jovaniSms.message.match(/\b\d{6}\b/);
     const jovaniOtp = jovaniOtpMatch![0];
@@ -587,7 +607,7 @@ export async function runOtpVerificationTests() {
     assert.ok(completeBody.data.accessToken, "Response must include accessToken inside data");
 
     const jovaniOtpRecord = otpsDb.find(
-      (o) => o.identifier === "251911002233" && o.purpose === OtpPurpose.REGISTER
+      (o) => o.identifier === "+251911002233" && o.purpose === OtpPurpose.REGISTER
     );
     assert.ok(jovaniOtpRecord, "Jovani OTP record must exist in DB");
     assert.ok(jovaniOtpRecord.usedAt !== null, "Jovani OTP must be marked as used");
@@ -614,7 +634,7 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(forgotRes.channel, "sms");
     assert.ok(forgotRes.message.includes("SMS"));
 
-    const emailUserSms = sentSmsMessages.find((s) => s.phone === "251999887766");
+    const emailUserSms = sentSmsMessages.find((s) => s.phone === "+251999887766");
     assert.ok(emailUserSms, "SMS OTP should have been delivered to user's registered phone");
     const emailUserOtpMatch = emailUserSms.message.match(/\b\d{6}\b/);
     const emailUserOtp = emailUserOtpMatch![0];
@@ -666,6 +686,7 @@ export async function runOtpVerificationTests() {
     (AppDataSource as any).getRepository = originalGetRepository;
     (AppDataSource as any).transaction = originalTransaction;
     (smsModule as any).sendSms = originalSendSms;
+    (ethioSmsModule as any).sendEthioSms = originalSendEthioSms;
     (emailService as any).sendOtpEmail = originalSendOtpEmail;
   }
 }

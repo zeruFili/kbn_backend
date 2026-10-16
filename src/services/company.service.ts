@@ -179,7 +179,7 @@ export class CompanyService {
       throw new AppError(409, "A company with this email already exists");
     }
 
-    const status = dto.status ?? CompanyStatus.PENDING;
+    const status = dto.status ?? CompanyStatus.ACTIVE;
     const is_active =
       dto.is_active !== undefined
         ? dto.is_active

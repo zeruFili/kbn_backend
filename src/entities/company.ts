@@ -71,7 +71,7 @@ export class Company {
   @Column({
     type: "enum",
     enum: CompanyStatus,
-    default: CompanyStatus.PENDING,
+    default: CompanyStatus.ACTIVE,
   })
   status: CompanyStatus;
 

@@ -10,6 +10,11 @@ export interface UserDetails {
   role: UserRole;
   status: UserStatus;
   profileImage: string | null;
+  phone: string | null;
+  website: string | null;
+  education: string | null;
+  achievement: string | null;
+  professional_experience: string | null;
 }
 
 const userRepo = () => AppDataSource.getRepository(User);
@@ -24,5 +29,10 @@ export async function getUserDetails(userId: string): Promise<UserDetails | null
     role: user.role,
     status: user.status,
     profileImage: user.profileImage ?? null,
+    phone: user.phone ?? null,
+    website: user.website ?? null,
+    education: user.education ?? null,
+    achievement: user.achievement ?? null,
+    professional_experience: user.professional_experience ?? null,
   };
 }

@@ -105,8 +105,27 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+?[1-9]\d{1,14}$/, { message: "Invalid E.164 phone format" })
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  website?: string;
+
+  @IsOptional()
+  @IsString()
+  education?: string;
+
+  @IsOptional()
+  @IsString()
+  achievement?: string;
+
+  @IsOptional()
+  @IsString()
+  professional_experience?: string;
+
+  @IsOptional()
+  @IsString()
+  professionalExperience?: string;
 
   @IsOptional()
   @IsString()

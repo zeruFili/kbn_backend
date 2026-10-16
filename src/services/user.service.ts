@@ -40,6 +40,11 @@ interface UpdateUserInput {
   full_name?: string;
   email?: string;
   phone?: string;
+  website?: string;
+  education?: string;
+  achievement?: string;
+  professional_experience?: string;
+  professionalExperience?: string;
   password?: string;
   status?: UserStatus;
   profileImage?: string | null;
@@ -62,6 +67,11 @@ function sanitizeUser(user: User): UserDetails {
     role: user.role,
     status: user.status,
     profileImage: user.profileImage ?? null,
+    phone: user.phone ?? null,
+    website: user.website ?? null,
+    education: user.education ?? null,
+    achievement: user.achievement ?? null,
+    professional_experience: user.professional_experience ?? null,
   };
 }
 
@@ -218,6 +228,23 @@ export class UserService {
 
     if (dto.phone !== undefined) {
       user.phone = dto.phone;
+    }
+
+    if (dto.website !== undefined) {
+      user.website = dto.website;
+    }
+
+    if (dto.education !== undefined) {
+      user.education = dto.education;
+    }
+
+    if (dto.achievement !== undefined) {
+      user.achievement = dto.achievement;
+    }
+
+    const exp = dto.professional_experience !== undefined ? dto.professional_experience : dto.professionalExperience;
+    if (exp !== undefined) {
+      user.professional_experience = exp;
     }
 
     if (dto.status !== undefined) {

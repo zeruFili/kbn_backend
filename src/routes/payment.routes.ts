@@ -28,13 +28,7 @@ router.get(
 router.get(
   "/user/:userId",
   authenticate,
-  authorize(
-    UserRole.Church,
-    UserRole.Company,
-    UserRole.User,
-    UserRole.Admin,
-    UserRole.Ministry
-  ),
+  requirePaymentOrActive,
   (req, res, next) => paymentController.list(req, res, next)
 );
 

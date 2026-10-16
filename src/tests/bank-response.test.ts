@@ -192,19 +192,19 @@ async function runBankResponseTests() {
   console.log("Test 6: Overpayment extends expiration date further to End of Month");
   const baseDate = new Date(2026, 9, 15); // October 15, 2026 (0-indexed 9)
 
-  // 1 Month payment: 500 ETB -> expires End of November 2026
+  // 1 Month payment: 500 ETB -> expires after 1 month (November 15, 2026)
   const singleMonthExp = bankResponseService.calculateSubscriptionExpiration(baseDate, 1);
   assert.strictEqual(singleMonthExp.getUTCFullYear(), 2026);
   assert.strictEqual(singleMonthExp.getUTCMonth(), 10, "Target month is November (10)");
-  assert.strictEqual(singleMonthExp.getUTCDate(), 30, "November has 30 days");
+  assert.strictEqual(singleMonthExp.getUTCDate(), 15, "Target day preserves base day (15)");
   assert.strictEqual(singleMonthExp.getUTCHours(), 23);
   assert.strictEqual(singleMonthExp.getUTCMinutes(), 59);
 
-  // 3 Months payment (Overpaid: 1500 ETB): expires End of January 2027
+  // 3 Months payment (Overpaid: 1500 ETB): expires after 3 months (January 15, 2027)
   const multiMonthExp = bankResponseService.calculateSubscriptionExpiration(baseDate, 3);
   assert.strictEqual(multiMonthExp.getUTCFullYear(), 2027);
   assert.strictEqual(multiMonthExp.getUTCMonth(), 0, "Target month is January (0)");
-  assert.strictEqual(multiMonthExp.getUTCDate(), 31, "January has 31 days");
+  assert.strictEqual(multiMonthExp.getUTCDate(), 15, "Target day preserves base day (15)");
 
   const overpaidPayload = {
     source: "awash-html",

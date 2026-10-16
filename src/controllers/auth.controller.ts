@@ -9,6 +9,8 @@ import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../v
 import { SendOtpDto, VerifyOtpDto, ResetPasswordWithOtpDto } from "../validators/otp.dto";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
+import { AppDataSource } from "../config/data-source";
+import { User } from "../entities/User";
 
 import {
   cleanupUploadedFiles,
@@ -46,7 +48,17 @@ export class AuthController {
         return;
       }
 
-      // Before successfully registering the user, it has to send an OTP and then verify the user
+      // Step 1: Validates inputs and checks email uniqueness
+      const existingUser = await AppDataSource.getRepository(User).findOne({
+        where: { email: dto.email.trim().toLowerCase() },
+      });
+      if (existingUser) {
+        cleanupUploadedFiles(req);
+        res.status(409).json({ success: false, message: "Email already exists" });
+        return;
+      }
+
+      // If OTP is not provided, generate and send verification code via SMS
       if (!dto.otp) {
         cleanupUploadedFiles(req);
         if (!dto.phone) {
@@ -83,12 +95,18 @@ export class AuthController {
 
       res.status(201).json({
         success: true,
-        message: "User registered successfully",
-        data: {
-          ...result.user,
-          ...result,
-        },
         accessToken: result.accessToken,
+        data: {
+          id: result.user.id,
+          fullName: result.user.full_name,
+          full_name: result.user.full_name,
+          email: result.user.email,
+          role: result.user.role,
+          status: result.user.status,
+          profileImage: result.user.profileImage,
+          accessToken: result.accessToken,
+        },
+        message: "User created successfully",
       });
     } catch (err) {
       cleanupUploadedFiles(req);

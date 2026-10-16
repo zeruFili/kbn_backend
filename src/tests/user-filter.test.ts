@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { Not } from "typeorm";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
 import { UserRole } from "../enums/user-role.enum";
@@ -78,7 +79,8 @@ async function runTests() {
     assert.strictEqual(capturedFindOptions.where.length, 1);
     assert.strictEqual(capturedFindOptions.where[0].status, UserStatus.ACTIVE);
     assert.strictEqual(capturedFindOptions.where[0].is_active, true);
-    console.log("  ✓ Passed: Non-admin where clause correctly enforces status=ACTIVE and is_active=true");
+    assert.deepStrictEqual(capturedFindOptions.where[0].role, Not(UserRole.Admin));
+    console.log("  ✓ Passed: Non-admin where clause correctly enforces status=ACTIVE, is_active=true, and excludes admin");
 
     // -------------------------------------------------------------
     // 2. Non-admin user attaching status='pending'
@@ -150,7 +152,8 @@ async function runTests() {
     assert.strictEqual(capturedFindOptions.where.length, 1);
     assert.strictEqual(capturedFindOptions.where[0].status, undefined);
     assert.strictEqual(capturedFindOptions.where[0].is_active, undefined);
-    console.log("  ✓ Passed: Admin query has no status restriction when status param is omitted");
+    assert.deepStrictEqual(capturedFindOptions.where[0].role, Not(UserRole.Admin));
+    console.log("  ✓ Passed: Admin query has no status restriction when status param is omitted and excludes admin");
 
     // -------------------------------------------------------------
     // 7. Admin user filtering by specific status (pending, suspended, inactive)
@@ -223,6 +226,7 @@ async function runTests() {
       user: {
         id: "member-123",
         role: UserRole.User,
+        status: UserStatus.ACTIVE,
       },
     };
 
@@ -233,7 +237,23 @@ async function runTests() {
     // As a non-admin, the captured query should be active despite req.query.status='pending'
     assert.strictEqual(capturedFindOptions.where[0].status, UserStatus.ACTIVE);
     assert.strictEqual(capturedFindOptions.where[0].is_active, true);
-    console.log("  ✓ Passed: UserController correctly passed currentUser and enforced active filter for non-admin");
+    assert.deepStrictEqual(capturedFindOptions.where[0].role, Not(UserRole.Admin));
+    console.log("  ✓ Passed: UserController correctly passed currentUser, enforced active filter, and excluded admin");
+
+    // -------------------------------------------------------------
+    // 12. Fetching all users explicitly excludes admin user accounts
+    // -------------------------------------------------------------
+    console.log("Test 12: Fetching all users excludes admin user accounts for both non-admin and admin callers");
+    capturedFindOptions = null;
+    await userService.findAll(1, 20, undefined, undefined, undefined, undefined, undefined);
+    assert.deepStrictEqual(capturedFindOptions.where[0].role, Not(UserRole.Admin));
+    console.log("  ✓ Passed: Unauthenticated / public query excludes admin user accounts");
+
+    capturedFindOptions = null;
+    await userService.findAll(1, 20, undefined, undefined, "test-search", undefined, undefined);
+    assert.deepStrictEqual(capturedFindOptions.where[0].role, Not(UserRole.Admin));
+    assert.deepStrictEqual(capturedFindOptions.where[1].role, Not(UserRole.Admin));
+    console.log("  ✓ Passed: Search query branches both exclude admin user accounts");
 
     console.log("\nALL TESTS PASSED SUCCESSFULLY! ✓");
   } finally {

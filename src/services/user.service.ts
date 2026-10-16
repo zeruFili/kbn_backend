@@ -1,4 +1,4 @@
-import { FindOptionsWhere, ILike } from "typeorm";
+import { FindOptionsWhere, ILike, Not } from "typeorm";
 import bcrypt from "bcryptjs";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
@@ -79,6 +79,13 @@ export class UserService {
     const l = Math.min(100, Math.max(1, limit));
     const where: FindOptionsWhere<User> = {};
 
+    // When fetching all users without a specific role filter, exclude the admin user account
+    if (role) {
+      where.role = role;
+    } else {
+      where.role = Not(UserRole.Admin);
+    }
+
     const isAdmin = currentUser?.role === UserRole.Admin;
 
     if (!isAdmin) {
@@ -86,14 +93,8 @@ export class UserService {
       // Even when attaching a status or is_active param, non-admin users only get active users (is_active: true, status: ACTIVE)
       where.status = UserStatus.ACTIVE;
       where.is_active = true;
-      if (role) {
-        where.role = role;
-      }
     } else {
       // Admin users can retrieve users regardless of their status
-      if (role) {
-        where.role = role;
-      }
       if (is_active !== undefined) {
         where.is_active = is_active;
       }
@@ -326,8 +327,8 @@ export class UserService {
         if (customExp) {
           latestPayment.expirationDate = customExp;
           paymentChanged = true;
-        } else if (!latestPayment.expirationDate) {
-          latestPayment.expirationDate = await paymentService.calculateExpirationDateForPayment(latestPayment);
+        } else {
+          latestPayment.expirationDate = await paymentService.calculateExpirationDateForPayment(latestPayment, new Date());
           paymentChanged = true;
         }
 

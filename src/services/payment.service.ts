@@ -263,12 +263,8 @@ function findExpirationDate(
 export class PaymentService {
   async calculateExpirationDateForPayment(
     payment: Payment,
-    customDate?: Date | null
+    baseDateOverride?: Date | null
   ): Promise<Date> {
-    if (customDate) {
-      return customDate;
-    }
-
     let coveredMonths = 1;
     const user = await userRepo().findOne({ where: { id: payment.user_id } });
     if (user) {
@@ -280,7 +276,7 @@ export class PaymentService {
       }
     }
 
-    const baseDate = payment.date ? new Date(payment.date) : new Date();
+    const baseDate = baseDateOverride || (payment.date ? new Date(payment.date) : new Date());
     return bankResponseService.calculateSubscriptionExpiration(baseDate, coveredMonths);
   }
 
@@ -407,16 +403,18 @@ export class PaymentService {
     const previousImage = payment.image;
     Object.assign(payment, dto);
 
-    // Accept and set explicit expirationDate / expiration_date if provided
+    const hasExplicitExp = dto.expirationDate !== undefined || dto.expiration_date !== undefined;
     if (dto.expirationDate !== undefined) {
       payment.expirationDate = dto.expirationDate;
     } else if (dto.expiration_date !== undefined) {
       payment.expirationDate = dto.expiration_date;
     }
 
-    // When status is ACCEPTED (Active), automatically calculate and set expirationDate if not set
-    if (payment.status === PaymentStatus.ACCEPTED && !payment.expirationDate) {
-      payment.expirationDate = await this.calculateExpirationDateForPayment(payment);
+    // When status is or becomes ACCEPTED (Active):
+    // If no explicit expirationDate was provided, recalculate expirationDate from the acceptance date (today),
+    // ensuring the user receives a full subscription period from the moment of approval.
+    if (payment.status === PaymentStatus.ACCEPTED && !hasExplicitExp) {
+      payment.expirationDate = await this.calculateExpirationDateForPayment(payment, new Date());
     }
 
     const saved = await repo().save(payment);

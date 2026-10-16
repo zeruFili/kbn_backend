@@ -240,18 +240,34 @@ function parseDateTimeString(value: unknown): Date {
     if (!isNaN(d.getTime())) return d;
   }
 
-  // BoA format: "DD/MM/YY HH:MM" or "DD/MM/YYYY HH:MM"
+  // BoA format: "DD/MM/YY HH:MM" or "DD/MM/YYYY HH:MM" or "MM/DD/YYYY"
   const slashMatch = str.match(
     /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
   );
   if (slashMatch) {
-    const [, day, month, yStr, h = "00", m = "00", s = "00"] = slashMatch;
+    const [, part1, part2, yStr, h = "00", m = "00", s = "00"] = slashMatch;
     let year = parseInt(yStr, 10);
     if (year < 100) year += 2000;
+    const p1 = parseInt(part1, 10);
+    const p2 = parseInt(part2, 10);
+
+    let day: number;
+    let month: number;
+    if (p1 > 12) {
+      day = p1;
+      month = p2;
+    } else if (p2 > 12) {
+      month = p1;
+      day = p2;
+    } else {
+      day = p1;
+      month = p2;
+    }
+
     const d = new Date(
       year,
-      parseInt(month, 10) - 1,
-      parseInt(day, 10),
+      month - 1,
+      day,
       parseInt(h, 10),
       parseInt(m, 10),
       parseInt(s, 10)
@@ -952,21 +968,24 @@ export class BankResponseService {
   /**
    * Calculates the expiration date based on the payment date and covered months.
    * Rules:
-   * - If payment is larger, expires further in the future.
-   * - Expires at the END of the relevant month (23:59:59.999 of the last day).
+   * - Preserves the day of the month after 'coveredMonths' (e.g. 10/16 + 1 month = 11/16 at 23:59:59.999 UTC).
+   * - If the target month has fewer days (e.g. Jan 31 -> Feb 28), clamps to the last day of the target month.
    */
   calculateSubscriptionExpiration(paymentDate: Date, coveredMonths: number): Date {
     const months = Math.max(1, coveredMonths);
-    const year = paymentDate.getFullYear();
-    const currentMonth = paymentDate.getMonth(); // 0-indexed
+    const d = new Date(paymentDate);
+    const originalDay = d.getUTCDate();
 
-    // In JS Date, setting day to 0 of (month + 1) gives the last day of month.
-    // So for month + coveredMonths, setting day to 0 of (currentMonth + coveredMonths + 1)
-    // gives the last day of that target month!
-    const targetMonth = currentMonth + months;
-    const endOfMonth = new Date(Date.UTC(year, targetMonth + 1, 0, 23, 59, 59, 999));
+    d.setUTCMonth(d.getUTCMonth() + months);
 
-    return endOfMonth;
+    // If day changed (e.g. Jan 31 -> March 2/3), clamp to last day of intended month
+    if (d.getUTCDate() !== originalDay) {
+      d.setUTCDate(0);
+    }
+
+    // Set expiration to the end of that target day (23:59:59.999 UTC)
+    d.setUTCHours(23, 59, 59, 999);
+    return d;
   }
 
   /**

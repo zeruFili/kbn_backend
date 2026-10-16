@@ -20,6 +20,8 @@ import {
 } from "../utils/upload.utils";
 import { USER_UPLOAD_SUBFOLDER } from "../middlewares/user-upload.middleware";
 import { generateAccessToken } from "../utils/jwt.utils";
+import { AppDataSource } from "../config/data-source";
+import { User } from "../entities/User";
 
 function resolveUserProfileImage(req: Request): string | undefined {
   return (
@@ -114,6 +116,16 @@ export class UserController {
 
       const isAdmin = req.user?.role === UserRole.Admin;
       if (!isAdmin) {
+        // Step 1: Validates inputs and checks email uniqueness
+        const existingEmail = await AppDataSource.getRepository(User).findOne({
+          where: { email: dto.email.trim().toLowerCase() },
+        });
+        if (existingEmail) {
+          cleanupUploadedFiles(req);
+          res.status(409).json({ success: false, message: "Email already exists" });
+          return;
+        }
+
         if (!dto.phone) {
           cleanupUploadedFiles(req);
           res.status(400).json({
@@ -150,11 +162,17 @@ export class UserController {
 
       res.status(201).json({
         success: true,
+        accessToken,
         data: {
-          ...user,
+          id: user.id,
+          fullName: user.fullName,
+          full_name: user.fullName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          profileImage: user.profileImage,
           accessToken,
         },
-        accessToken,
         message: "User created successfully",
       });
     } catch (error) {

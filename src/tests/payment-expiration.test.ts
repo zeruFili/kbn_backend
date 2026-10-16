@@ -324,9 +324,10 @@ async function runPaymentExpirationTests() {
     );
     assert.strictEqual(activatedAuto.status, PaymentStatus.ACCEPTED);
     assert.ok(activatedAuto.expirationDate instanceof Date, "Expiration date should be automatically set");
-    assert.strictEqual(activatedAuto.expirationDate.getUTCMonth(), 10, "Target month should be November (10)");
-    assert.strictEqual(activatedAuto.expirationDate.getUTCDate(), 30, "November has 30 days");
-    console.log("  ✓ Passed: Payment status updated to Active and expiration date automatically set to end of month");
+    const expectedNextMonth = (new Date().getUTCMonth() + 1) % 12;
+    assert.strictEqual(activatedAuto.expirationDate.getUTCMonth(), expectedNextMonth, "Target month should be 1 month ahead");
+    assert.strictEqual(activatedAuto.expirationDate.getUTCDate(), new Date().getUTCDate(), "Target day preserves acceptance day");
+    console.log("  ✓ Passed: Payment status updated to Active and expiration date automatically set to 1 month ahead");
 
     // -------------------------------------------------------------
     // 12. Service: updateUserPaymentStatus updates user payment by userId
@@ -341,7 +342,41 @@ async function runPaymentExpirationTests() {
     assert.strictEqual(userPaymentResult.user_id, "user-1");
     console.log("  ✓ Passed: updateUserPaymentStatus successfully sets status and expiration date");
 
-    console.log("\nAll 12 payment expiration tests completed successfully!");
+    // -------------------------------------------------------------
+    // 13. Service: update payment status overwrites stale existing expiration date
+    // -------------------------------------------------------------
+    console.log("Test 13: Admin updates payment status to Active on payment that has stale expiration date");
+    const pendingWithStaleExp = mockRepo.create({
+      id: "pay-stale-1",
+      user_id: "user-1",
+      status: PaymentStatus.PENDING,
+      amount: "500.00",
+      date: new Date(),
+      time: "10:00:00",
+      expirationDate: new Date("2026-12-31T23:59:59.999Z"), // Old stale expiration date
+      created_at: new Date(),
+    });
+    await mockRepo.save(pendingWithStaleExp);
+
+    const activatedRecalculated = await paymentService.update(
+      "pay-stale-1",
+      { status: PaymentStatus.ACCEPTED },
+      { id: "admin-1", role: UserRole.Admin }
+    );
+    assert.strictEqual(activatedRecalculated.status, PaymentStatus.ACCEPTED);
+    assert.notStrictEqual(
+      activatedRecalculated.expirationDate?.toISOString(),
+      "2026-12-31T23:59:59.999Z",
+      "Stale expiration date must not be preserved upon acceptance"
+    );
+    assert.strictEqual(
+      activatedRecalculated.expirationDate?.getUTCMonth(),
+      expectedNextMonth,
+      "Target month should be 1 month from acceptance date"
+    );
+    console.log("  ✓ Passed: Stale expiration date is successfully recalculated to 1 month ahead upon acceptance");
+
+    console.log("\nAll 13 payment expiration tests completed successfully!");
   } finally {
     (AppDataSource as any).getRepository = originalGetRepository;
   }

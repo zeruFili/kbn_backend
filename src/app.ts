@@ -27,16 +27,21 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 const allowedOrigins = [
-  "https://kbnep.com",
-  "https://www.kbnep.com",
-  // "http://localhost:5173",
-  // "http://localhost:3000",
-  // "http://localhost:8443",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:8443",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:8443",
 ];
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith("kbnep.com")) {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+    ) {
       return callback(null, true);
     }
     return callback(null, true);

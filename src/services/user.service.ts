@@ -191,10 +191,10 @@ export class UserService {
 
     const password_hash = await bcrypt.hash(dto.password, BCRYPT_COST);
 
-    const status = dto.status ?? UserStatus.PENDING;
-    const is_active = dto.is_active !== undefined
-      ? dto.is_active
-      : status === UserStatus.ACTIVE;
+    const status = isAdmin ? (dto.status ?? UserStatus.PENDING) : UserStatus.PENDING;
+    const is_active = isAdmin
+      ? (dto.is_active !== undefined ? dto.is_active : status === UserStatus.ACTIVE)
+      : false;
 
     return await AppDataSource.transaction(async (transactionalManager) => {
       let otpRecordId: string | null = null;

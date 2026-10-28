@@ -43,7 +43,9 @@ export class RegisterDto {
   password: string;
 
   @IsOptional()
-  @IsIn([UserRole.Church, UserRole.Company, UserRole.User, UserRole.Ministry, UserRole.Admin])
+  @IsIn([UserRole.Church, UserRole.Company, UserRole.User, UserRole.Ministry], {
+    message: "Admin role cannot be assigned during registration",
+  })
   role?: UserRole;
 
   @IsOptional()
@@ -76,4 +78,3 @@ export class RegisterDto {
   })
   otp?: string;
 }
-

@@ -3,6 +3,7 @@ import { AppDataSource } from "../config/data-source";
 import { Company } from "../entities/company";
 import { CompanyStatus } from "../enums/company-status.enum";
 import { UserRole } from "../enums/user-role.enum";
+import { UserStatus } from "../enums/user-status.enum";
 import { companyService } from "../services/company.service";
 import { companyController } from "../controllers/company.controller";
 import { AuthRequest } from "../middlewares/auth.middleware";
@@ -195,6 +196,7 @@ async function runCompanyFilterTests() {
       user: {
         id: "member-456",
         role: UserRole.User,
+        status: UserStatus.ACTIVE,
       },
     };
 

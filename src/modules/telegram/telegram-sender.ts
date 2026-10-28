@@ -1,5 +1,6 @@
-import { TelegramClient, Api } from "telegram";
+import { TelegramClient, Api, helpers } from "telegram";
 import { StringSession } from "telegram/sessions";
+import { LogLevel } from "telegram/extensions/Logger";
 import {
   telegramConfig,
   isTelegramConfigured,
@@ -68,7 +69,7 @@ export class TelegramSender {
         }
       );
 
-      client.setLogLevel("warn");
+      client.setLogLevel(LogLevel.WARN);
 
       if (sessionStr) {
         await client.connect();
@@ -109,7 +110,7 @@ export class TelegramSender {
         new Api.contacts.ImportContacts({
           contacts: [
             new Api.InputPhoneContact({
-              clientId: BigInt(Date.now()),
+              clientId: helpers.generateRandomLong(),
               phone,
               firstName: "Temp",
               lastName: "Contact",

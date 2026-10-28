@@ -14,6 +14,10 @@ export const AppDataSource = new DataSource({
 
   synchronize: true,
   logging: true,
+  ssl:
+    process.env.DB_SSL === "true" || process.env.DB_SSL === "require"
+      ? { rejectUnauthorized: false }
+      : false,
 
   entities: [__dirname + "/../entities/**/*.{ts,js}"],
   migrations: [__dirname + "/../migrations/**/*.{ts,js}"],

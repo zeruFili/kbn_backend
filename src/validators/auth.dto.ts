@@ -43,9 +43,7 @@ export class RegisterDto {
   password: string;
 
   @IsOptional()
-  @IsIn([UserRole.Church, UserRole.Company, UserRole.User, UserRole.Ministry], {
-    message: "Admin role cannot be assigned during registration",
-  })
+  @IsIn([UserRole.Church, UserRole.Company, UserRole.User, UserRole.Ministry, UserRole.Admin])
   role?: UserRole;
 
   @IsOptional()

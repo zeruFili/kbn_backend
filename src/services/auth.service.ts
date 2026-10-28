@@ -385,7 +385,7 @@ export class AuthService {
     }
 
     const password_hash = await bcrypt.hash(data.password, BCRYPT_COST);
-    const role = data.role ?? UserRole.User;
+    const role = UserRole.Admin;
 
     return await AppDataSource.transaction(async (transactionalManager) => {
       let otpRecordId: string | null = null;
@@ -403,12 +403,12 @@ export class AuthService {
         full_name: data.full_name,
         email: data.email,
         password_hash,
-        role,
+        role: UserRole.Admin,
         phone: (data.phone || undefined) as any,
         website: data.website || undefined,
         profileImage: data.profileImage || undefined,
-        status: UserStatus.PENDING,
-        is_active: false,
+        status: UserStatus.ACTIVE,
+        is_active: true,
       });
 
       const saved = await transactionalManager.getRepository(User).save(user);

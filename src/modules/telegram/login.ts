@@ -6,6 +6,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
+import { LogLevel } from "telegram/extensions/Logger";
 import {
   telegramConfig,
   saveStoredSession,
@@ -53,7 +54,7 @@ async function main() {
     }
   );
 
-  client.setLogLevel("info");
+  client.setLogLevel(LogLevel.INFO);
 
   console.log("🔐 Starting authentication session...");
   await client.start({

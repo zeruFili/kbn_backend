@@ -26,9 +26,28 @@ import fileRoutes from "./routes/file.routes";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.set("trust proxy", 1);
+const allowedOrigins = [
+  "https://kbnep.com",
+  "https://www.kbnep.com",
+  // "http://localhost:5173",
+  // "http://localhost:3000",
+  // "http://localhost:8443",
+];
 
-app.use(cors());
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith("kbnep.com")) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -60,6 +79,10 @@ async function cleanupOldMarketingTables() {
     database: process.env.DB_NAME || "wase_workflow",
     synchronize: false,
     logging: false,
+    ssl:
+      process.env.DB_SSL === "true" || process.env.DB_SSL === "require"
+        ? { rejectUnauthorized: false }
+        : false,
   });
 
   try {

@@ -1,4 +1,4 @@
-import { IsEnum, IsString, Length, Matches } from "class-validator";
+import { IsEnum, IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 
 export class SendOtpDto {
@@ -10,6 +10,10 @@ export class SendOtpDto {
     message: "Purpose must be either REGISTER or RESET_PASSWORD",
   })
   purpose: OtpPurpose;
+
+  @IsOptional()
+  @IsIn(["sms", "email"])
+  otpMethod?: "sms" | "email";
 }
 
 export class VerifyOtpDto {
@@ -27,6 +31,10 @@ export class VerifyOtpDto {
     message: "Purpose must be either REGISTER or RESET_PASSWORD",
   })
   purpose: OtpPurpose;
+
+  @IsOptional()
+  @IsIn(["sms", "email"])
+  otpMethod?: "sms" | "email";
 }
 
 export class ResetPasswordWithOtpDto {

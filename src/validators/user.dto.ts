@@ -43,6 +43,7 @@ export class CreateUserDto {
   role: UserRole;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => !!value)
   @IsString()
   @Matches(/^(\+?[1-9]\d{1,14}|0[79]\d{8}|[79]\d{8})$/, {
     message: "Invalid phone number format",
@@ -55,6 +56,12 @@ export class CreateUserDto {
     message: "OTP must be a 6-digit number",
   })
   otp?: string;
+
+  @IsOptional()
+  @IsIn(["sms", "email"], {
+    message: "OTP method must be either 'sms' or 'email'",
+  })
+  otpMethod?: "sms" | "email";
 
   @IsOptional()
   @IsUrl()

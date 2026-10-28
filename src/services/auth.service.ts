@@ -308,6 +308,15 @@ export class AuthService {
 
       // 4. Ensure OTP record links to user
       await otpService.linkUser(verifyResult.record.id, user.id, transactionalManager);
+
+      // 5. Send password reset success email
+      if (user.email) {
+        try {
+          await emailService.sendResetSuccessEmail(user.email);
+        } catch (emailErr: any) {
+          console.warn("[AuthService] Reset success email notice:", emailErr?.message);
+        }
+      }
     });
   }
 
@@ -356,6 +365,14 @@ export class AuthService {
 
     matchedToken.used = true;
     await resetTokenRepo().save(matchedToken);
+
+    if (user.email) {
+      try {
+        await emailService.sendResetSuccessEmail(user.email);
+      } catch (emailErr: any) {
+        console.warn("[AuthService] Reset success email notice:", emailErr?.message);
+      }
+    }
   }
 
   async register(data: {
@@ -367,19 +384,28 @@ export class AuthService {
     website?: string;
     profileImage?: string | null;
     otp?: string;
+    otpMethod?: "sms" | "email";
   }): Promise<{
     accessToken: string;
     user: SafeUserOutput;
   }> {
     const requireOtp = process.env.REQUIRE_OTP_VERIFICATION !== "false";
+    const otpMethod = (data.otpMethod || (data.phone ? "sms" : "email")).toLowerCase() as "sms" | "email";
+    const targetIdentifier =
+      otpMethod === "email"
+        ? data.email.trim().toLowerCase()
+        : data.phone
+        ? data.phone.trim()
+        : data.email.trim().toLowerCase();
+
     if (requireOtp && !data.otp) {
       throw new AppError(400, "OTP verification code is required for registration.");
     }
-    if (requireOtp && !data.phone) {
-      throw new AppError(400, "Phone number is required for registration and OTP verification.");
+    if (requireOtp && otpMethod === "sms" && !data.phone) {
+      throw new AppError(400, "Phone number is required for registration and SMS OTP verification.");
     }
 
-    const existing = await userRepo().findOne({ where: { email: data.email } });
+    const existing = await userRepo().findOne({ where: { email: data.email.trim().toLowerCase() } });
     if (existing) {
       throw new AppError(409, "Email already exists");
     }
@@ -389,9 +415,9 @@ export class AuthService {
 
     return await AppDataSource.transaction(async (transactionalManager) => {
       let otpRecordId: string | null = null;
-      if (data.otp && data.phone) {
+      if (data.otp && targetIdentifier) {
         const verifyResult = await otpService.verifyOtp(
-          data.phone,
+          targetIdentifier,
           data.otp,
           OtpPurpose.REGISTER,
           transactionalManager
@@ -401,7 +427,7 @@ export class AuthService {
 
       const user = transactionalManager.getRepository(User).create({
         full_name: data.full_name,
-        email: data.email,
+        email: data.email.trim().toLowerCase(),
         password_hash,
         role,
         phone: (data.phone || undefined) as any,
@@ -415,6 +441,13 @@ export class AuthService {
 
       if (otpRecordId) {
         await otpService.linkUser(otpRecordId, saved.id, transactionalManager);
+      }
+
+      // Send welcome email
+      try {
+        await emailService.sendWelcomeEmail(saved.email, saved.full_name);
+      } catch (welcomeErr: any) {
+        console.warn("[AuthService] Welcome email notice:", welcomeErr?.message);
       }
 
       const accessToken = generateAccessToken({

@@ -148,11 +148,17 @@ export class UserController {
           return;
         }
 
-        if (!dto.phone) {
+        const otpMethod = (dto.otpMethod || (dto.phone ? "sms" : "email")).toLowerCase() as "sms" | "email";
+        let targetIdentifier = dto.phone?.trim() || "";
+        let channelMessage = "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.";
+        if (otpMethod === "email") {
+          targetIdentifier = dto.email.trim().toLowerCase();
+          channelMessage = `Verification code sent to your email (${targetIdentifier}). Please enter the OTP to complete registration.`;
+        } else if (!dto.phone) {
           cleanupUploadedFiles(req);
           res.status(400).json({
             success: false,
-            message: "Phone number is required for registration and OTP verification.",
+            message: "Phone number is required for SMS OTP verification.",
           });
           return;
         }
@@ -160,13 +166,14 @@ export class UserController {
         // Before successfully registering the user, send an OTP via SMS and require verification
         if (!dto.otp) {
           cleanupUploadedFiles(req);
-          const sendResult = await otpService.generateAndSendOtp(dto.phone, OtpPurpose.REGISTER);
+          const sendResult = await otpService.generateAndSendOtp(targetIdentifier, OtpPurpose.REGISTER);
           res.status(200).json({
             success: true,
             requiresOtp: true,
-            message: "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.",
+            message: channelMessage,
             data: {
               identifier: sendResult.identifier,
+              otpMethod,
               expiresAt: sendResult.expiresAt,
             },
           });

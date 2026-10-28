@@ -1,94 +1,177 @@
 import nodemailer from "nodemailer";
+import dotenv from "dotenv";
+import {
+  PASSWORD_RESET_REQUEST_TEMPLATE,
+  PASSWORD_RESET_SUCCESS_TEMPLATE,
+  VERIFICATION_EMAIL_TEMPLATE,
+} from "./emailtemplates";
 import { AppError } from "../middlewares/error.middleware";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_SECURE === "true",
+dotenv.config();
+
+const getEmailUser = () => process.env.Email_User || process.env.EMAIL_USER || "";
+const getEmailPass = () => process.env.Email_Password || process.env.EMAIL_PASSWORD || "";
+
+export const transporter = nodemailer.createTransport({
+  service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
+    user: getEmailUser(),
+    pass: getEmailPass(),
   },
 });
+
+export const sendVerificationEmail = async (email: string, verificationToken: string): Promise<any> => {
+  const fromUser = getEmailUser();
+  const mailOptions = {
+    from: `"Kingdom Builders Network" <${fromUser}>`,
+    to: email,
+    subject: "Verify your email - Kingdom Builders Network",
+    html: VERIFICATION_EMAIL_TEMPLATE.replace("{verificationCode}", verificationToken),
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Verification email sent successfully", info.response);
+    return info;
+  } catch (error) {
+    console.error("Error sending verification email", error);
+    throw new Error(`Error sending verification email: ${error}`);
+  }
+};
+
+export const sendWelcomeEmail = async (email: string, name: string): Promise<any> => {
+  const fromUser = getEmailUser();
+  const mailOptions = {
+    from: `"Kingdom Builders Network" <${fromUser}>`,
+    to: email,
+    subject: "Welcome to Kingdom Builders Network!",
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Welcome to Kingdom Builders Network</title>
+</head>
+<body style="margin: 0; padding: 24px 0; background-color: #F4EFE3; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #4A5568;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(15, 29, 58, 0.08); border: 1px solid #E2DFD9;">
+    <div style="background: linear-gradient(135deg, #0F1D3A 0%, #1A335C 100%); padding: 32px 24px; text-align: center; border-bottom: 3px solid #D4A853;">
+      <p style="margin: 0 0 6px 0; font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: #D4A853; text-transform: uppercase;">
+        Kingdom Builders Network
+      </p>
+      <h1 style="margin: 0; color: #FFFFFF; font-family: 'Playfair Display', Georgia, serif; font-size: 26px; font-weight: 700;">
+        Welcome to the Community!
+      </h1>
+    </div>
+    <div style="padding: 36px 32px 28px 32px;">
+      <p style="margin-top: 0; font-size: 16px; color: #0F1D3A; font-weight: 600;">Welcome, ${name || "Builder"}!</p>
+      <p style="font-size: 14px; color: #4A5568;">
+        We are thrilled to welcome you to <strong>Kingdom Builders Network</strong>. Your account has been verified and registered successfully.
+      </p>
+      <div style="border-top: 1px solid #F0EDE7; padding-top: 20px; margin-top: 28px;">
+        <p style="margin: 0; font-size: 14px; color: #0F1D3A; font-weight: 600;">Best regards,</p>
+        <p style="margin: 2px 0 0 0; font-size: 13px; color: #D4A853; font-weight: 700;">Kingdom Builders Network Team</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Welcome email sent successfully", info.response);
+    return info;
+  } catch (error) {
+    console.error("Error sending welcome email", error);
+    throw new Error(`Error sending welcome email: ${error}`);
+  }
+};
+
+export const sendPasswordResetEmail = async (email: string, resetURL: string): Promise<any> => {
+  const fromUser = getEmailUser();
+  const mailOptions = {
+    from: `"Kingdom Builders Network" <${fromUser}>`,
+    to: email,
+    subject: "Reset your password - Kingdom Builders Network",
+    html: PASSWORD_RESET_REQUEST_TEMPLATE.replace("{resetURL}", resetURL),
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Password reset email sent successfully", info.response);
+    return info;
+  } catch (error) {
+    console.error("Error sending password reset email", error);
+    throw new Error(`Error sending password reset email: ${error}`);
+  }
+};
+
+export const sendResetSuccessEmail = async (email: string): Promise<any> => {
+  const fromUser = getEmailUser();
+  const mailOptions = {
+    from: `"Kingdom Builders Network" <${fromUser}>`,
+    to: email,
+    subject: "Password Reset Successful - Kingdom Builders Network",
+    html: PASSWORD_RESET_SUCCESS_TEMPLATE,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Password reset success email sent successfully", info.response);
+    return info;
+  } catch (error) {
+    console.error("Error sending password reset success email", error);
+    throw new Error(`Error sending password reset success email: ${error}`);
+  }
+};
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 export class EmailService {
-  async sendPasswordResetEmail(to: string, userName: string, rawToken: string): Promise<void> {
-    // const resetUrl = `${FRONTEND_URL}/workflow-managment/#/reset-password/${rawToken}`; 
-    const resetUrl = `${FRONTEND_URL}/reset-password/${rawToken}`;
-
-
-    const mailOptions = {
-      from: `"Wase Workflow" <${process.env.EMAIL_USER}>`,
-      to,
-      subject: "Reset your password",
-      html: `
-        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color: #1a73e8; text-align: center;">Password Reset Request</h2>
-          <p>Hello ${userName},</p>
-          <p>We received a request to reset your password for your Wase Workflow account. Click the button below to set a new password:</p>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${resetUrl}"
-               style="background-color: #1a73e8; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 6px; font-size: 16px; font-weight: bold; display: inline-block;">
-               Reset Password
-            </a>
-          </div>
-          <p style="color: #888; font-size: 14px;">
-            This link will expire in <strong>30 minutes</strong>. If you did not request a password reset, please ignore this email — your password will remain unchanged.
-          </p>
-          <p style="color: #888; font-size: 14px;">
-            If the button above does not work, copy and paste this URL into your browser:
-            <br />
-            <a href="${resetUrl}">${resetUrl}</a>
-          </p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-          <p style="color: #aaa; font-size: 12px; text-align: center;">This is an automated email from Wase Workflow. Please do not reply.</p>
-        </div>
-      `,
-    };
+  async sendPasswordResetEmail(to: string, userNameOrResetUrl: string, rawToken?: string): Promise<void> {
+    let resetUrl: string;
+    if (rawToken) {
+      resetUrl = `${FRONTEND_URL}/reset-password/${rawToken}`;
+    } else {
+      resetUrl = userNameOrResetUrl;
+    }
 
     try {
-      await transporter.sendMail(mailOptions);
+      await sendPasswordResetEmail(to, resetUrl);
     } catch (err: any) {
       console.error("Email send failed:", err.message);
       throw new AppError(500, "Unable to send reset email. Please try again later.");
     }
   }
 
-  async sendOtpEmail(to: string, userName: string, otp: string, purpose: string): Promise<void> {
-    const isReset = purpose === "RESET_PASSWORD";
-    const subject = isReset ? "Password Reset Verification Code" : "Your Verification Code";
-    const actionText = isReset ? "reset your password" : "verify your account";
-
-    const mailOptions = {
-      from: `"Wase Workflow" <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html: `
-        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color: #1a73e8; text-align: center;">Verification Code</h2>
-          <p>Hello ${userName || "User"},</p>
-          <p>Your verification code to ${actionText} is:</p>
-          <div style="text-align: center; margin: 32px 0;">
-            <span style="display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1a73e8; background: #f0f4f9; padding: 12px 28px; border-radius: 8px;">
-              ${otp}
-            </span>
-          </div>
-          <p style="color: #888; font-size: 14px;">
-            This code will expire in <strong>10 minutes</strong>. If you did not request this, please ignore this email.
-          </p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-          <p style="color: #aaa; font-size: 12px; text-align: center;">This is an automated message from Wase Workflow. Please do not reply.</p>
-        </div>
-      `,
-    };
-
+  async sendResetSuccessEmail(to: string): Promise<void> {
     try {
-      await transporter.sendMail(mailOptions);
+      await sendResetSuccessEmail(to);
+    } catch (err: any) {
+      console.warn("[EmailService] Failed to send reset success email:", err.message);
+    }
+  }
+
+  async sendWelcomeEmail(to: string, name: string): Promise<void> {
+    try {
+      await sendWelcomeEmail(to, name);
+    } catch (err: any) {
+      console.warn("[EmailService] Failed to send welcome email:", err.message);
+    }
+  }
+
+  async sendOtpEmail(to: string, _userName: string, otp: string, _purpose?: string): Promise<void> {
+    try {
+      await sendVerificationEmail(to, otp);
     } catch (err: any) {
       console.warn("[EmailService] Failed to send OTP email:", err.message);
+      throw err;
     }
+  }
+
+  async sendVerificationEmail(to: string, verificationToken: string): Promise<void> {
+    await sendVerificationEmail(to, verificationToken);
   }
 }
 

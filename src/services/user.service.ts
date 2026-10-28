@@ -12,6 +12,7 @@ import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { deleteFile } from "../utils/upload.utils";
 import { paymentService } from "./payment.service";
 import { otpService } from "./otp.service";
+import { emailService } from "./email.service";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 
 interface PaginatedResult<T> {
@@ -34,6 +35,7 @@ interface CreateUserInput {
   is_active?: boolean;
   profileImage?: string | null;
   otp?: string;
+  otpMethod?: "sms" | "email";
 }
 
 interface UpdateUserInput {
@@ -198,9 +200,17 @@ export class UserService {
 
     return await AppDataSource.transaction(async (transactionalManager) => {
       let otpRecordId: string | null = null;
-      if (!isAdmin && dto.otp && dto.phone) {
+      const otpMethod = (dto.otpMethod || (dto.phone ? "sms" : "email")).toLowerCase() as "sms" | "email";
+      const targetIdentifier =
+        otpMethod === "email"
+          ? dto.email.trim().toLowerCase()
+          : dto.phone
+          ? dto.phone.trim()
+          : dto.email.trim().toLowerCase();
+
+      if (!isAdmin && dto.otp && targetIdentifier) {
         const verifyResult = await otpService.verifyOtp(
-          dto.phone,
+          targetIdentifier,
           dto.otp,
           OtpPurpose.REGISTER,
           transactionalManager
@@ -210,7 +220,7 @@ export class UserService {
 
       const user = transactionalManager.getRepository(User).create({
         full_name: dto.full_name,
-        email: dto.email,
+        email: dto.email.trim().toLowerCase(),
         password_hash,
         role: dto.role,
         phone: (dto.phone || undefined) as any,
@@ -223,6 +233,12 @@ export class UserService {
 
       if (otpRecordId) {
         await otpService.linkUser(otpRecordId, saved.id, transactionalManager);
+      }
+
+      try {
+        await emailService.sendWelcomeEmail(saved.email, saved.full_name);
+      } catch (welcomeErr: any) {
+        console.warn("[UserService] Welcome email notice:", welcomeErr?.message);
       }
 
       return sanitizeUser(saved);

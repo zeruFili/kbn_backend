@@ -124,6 +124,9 @@ export class OtpService {
         await emailService.sendOtpEmail(identifier, "User", plainOtp, purpose);
       } catch (emailErr: any) {
         console.warn(`[OtpService] Email send notice for ${identifier}: ${emailErr.message}`);
+        if (process.env.NODE_ENV === "production") {
+          throw new AppError(502, "Failed to deliver email verification code. Please try again later.");
+        }
       }
     } else {
       const smsMessage = `Your Kingdom Builders Hub verification code is ${plainOtp}. It expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code with anyone.`;

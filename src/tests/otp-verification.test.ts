@@ -44,9 +44,11 @@ export async function runOtpVerificationTests() {
 
   // Mock emailService.sendOtpEmail to capture email OTP dispatches
   const originalSendOtpEmail = emailService.sendOtpEmail;
+  const originalSendWelcomeEmail = emailService.sendWelcomeEmail;
   (emailService as any).sendOtpEmail = async (to: string, userName: string, otp: string, purpose: string) => {
     sentEmailOtps.push({ to, otp, purpose });
   };
+  (emailService as any).sendWelcomeEmail = async (_to: string, _name: string) => {};
 
   // Mock repository for OtpVerification
   const mockOtpRepo: any = {
@@ -681,13 +683,98 @@ export async function runOtpVerificationTests() {
     assert.strictEqual(isFallbackPassValid, true, "Password must be updated when verified via Email fallback");
     console.log("  ✓ Passed: Fallback to Email OTP functions correctly when user has no phone\n");
 
-    console.log("All 12 OTP Verification Test Suites Passed Successfully! 🚀\n");
+    // -------------------------------------------------------------
+    // Test 13: User Registration Flow with Email OTP Option
+    // -------------------------------------------------------------
+    console.log("Test 13: User Registration Flow with Email OTP Option");
+    const emailUserTarget = "googleuser@gmail.com";
+    let emailInitStatus = 0;
+    let emailInitBody: any = null;
+
+    const mockEmailInitRes: any = {
+      status: (code: number) => {
+        emailInitStatus = code;
+        return {
+          json: (data: any) => {
+            emailInitBody = data;
+          },
+        };
+      },
+    };
+
+    // Step 1: User submits registration form requesting OTP via Email
+    const emailInitReq: any = {
+      body: {
+        full_name: "Google User",
+        email: emailUserTarget,
+        password: "Password123!",
+        role: UserRole.User,
+        otpMethod: "email",
+      },
+    };
+
+    await userController.create(emailInitReq, mockEmailInitRes, () => {});
+
+    assert.strictEqual(emailInitStatus, 200, "Initiating registration with email OTP should return 200");
+    assert.strictEqual(emailInitBody.requiresOtp, true, "Response must indicate requiresOtp: true");
+    assert.ok(
+      emailInitBody.message.includes("email"),
+      "Response message must indicate Email dispatch"
+    );
+
+    const emailSentItem = sentEmailOtps.find((e) => e.to === emailUserTarget);
+    assert.ok(emailSentItem, "Email OTP must have been sent to googleuser@gmail.com");
+    assert.ok(emailSentItem.otp, "Email OTP must contain 6 digits");
+
+    // Step 2: User completes registration with the received Email OTP
+    let emailCompleteStatus = 0;
+    let emailCompleteBody: any = null;
+
+    const mockEmailCompleteRes: any = {
+      status: (code: number) => {
+        emailCompleteStatus = code;
+        return {
+          json: (data: any) => {
+            emailCompleteBody = data;
+          },
+        };
+      },
+    };
+
+    const emailCompleteReq: any = {
+      body: {
+        full_name: "Google User",
+        email: emailUserTarget,
+        password: "Password123!",
+        role: UserRole.User,
+        otpMethod: "email",
+        otp: emailSentItem.otp,
+      },
+    };
+
+    await userController.create(emailCompleteReq, mockEmailCompleteRes, () => {});
+
+    assert.strictEqual(emailCompleteStatus, 201, "Completing registration with valid email OTP should return 201 Created");
+    assert.strictEqual(emailCompleteBody.message, "User created successfully");
+    assert.strictEqual(emailCompleteBody.data.fullName, "Google User");
+    assert.strictEqual(emailCompleteBody.data.email, emailUserTarget);
+
+    const emailOtpRecord = otpsDb.find(
+      (o) => o.identifier === emailUserTarget && o.purpose === OtpPurpose.REGISTER
+    );
+    assert.ok(emailOtpRecord, "Email OTP record must exist in DB");
+    assert.ok(emailOtpRecord.usedAt !== null, "Email OTP must be marked as used");
+    assert.strictEqual(emailOtpRecord.userId, emailCompleteBody.data.id, "User ID must be linked to Email OTP record");
+    console.log("  ✓ Passed: Registration via Email OTP auto-dispatches and completes upon verification\n");
+
+    console.log("All 13 OTP Verification Test Suites Passed Successfully! 🚀\n");
   } finally {
     (AppDataSource as any).getRepository = originalGetRepository;
     (AppDataSource as any).transaction = originalTransaction;
     (smsModule as any).sendSms = originalSendSms;
     (ethioSmsModule as any).sendEthioSms = originalSendEthioSms;
     (emailService as any).sendOtpEmail = originalSendOtpEmail;
+    (emailService as any).sendWelcomeEmail = originalSendWelcomeEmail;
   }
 }
 

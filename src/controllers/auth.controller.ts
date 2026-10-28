@@ -37,6 +37,8 @@ export class AuthController {
       const body = {
         ...req.body,
         full_name: req.body.full_name || req.body.name,
+        phone: typeof req.body.phone === "string" && req.body.phone.trim() ? req.body.phone.trim() : undefined,
+        otpMethod: req.body.otpMethod || req.body.otp_method || (req.body.phone ? "sms" : "email"),
         ...(profileImage ? { profileImage } : {}),
       };
       const dto = plainToInstance(RegisterDto, body);
@@ -58,24 +60,38 @@ export class AuthController {
         return;
       }
 
-      // If OTP is not provided, generate and send verification code via SMS
+      const otpMethod = (dto.otpMethod || (dto.phone ? "sms" : "email")).toLowerCase() as "sms" | "email";
+
+      // If OTP is not provided, generate and send verification code via chosen destination (SMS or Email)
       if (!dto.otp) {
         cleanupUploadedFiles(req);
-        if (!dto.phone) {
-          res.status(400).json({
-            success: false,
-            message: "Phone number is required for registration and OTP verification.",
-          });
-          return;
+
+        let targetIdentifier: string;
+        let channelMessage: string;
+
+        if (otpMethod === "email") {
+          targetIdentifier = dto.email.trim().toLowerCase();
+          channelMessage = `Verification code sent to your email (${targetIdentifier}). Please check your inbox and enter the OTP to complete registration.`;
+        } else {
+          if (!dto.phone) {
+            res.status(400).json({
+              success: false,
+              message: "Phone number is required for SMS OTP verification.",
+            });
+            return;
+          }
+          targetIdentifier = dto.phone.trim();
+          channelMessage = "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.";
         }
 
-        const sendResult = await otpService.generateAndSendOtp(dto.phone, OtpPurpose.REGISTER);
+        const sendResult = await otpService.generateAndSendOtp(targetIdentifier, OtpPurpose.REGISTER);
         res.status(200).json({
           success: true,
           requiresOtp: true,
-          message: "Verification code sent to your phone via SMS. Please enter the OTP to complete registration.",
+          message: channelMessage,
           data: {
             identifier: sendResult.identifier,
+            otpMethod,
             expiresAt: sendResult.expiresAt,
           },
         });
@@ -91,6 +107,7 @@ export class AuthController {
         website: dto.website,
         profileImage: dto.profileImage,
         otp: dto.otp,
+        otpMethod,
       });
 
       res.status(201).json({

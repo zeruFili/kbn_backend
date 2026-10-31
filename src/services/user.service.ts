@@ -2,6 +2,7 @@ import { FindOptionsWhere, ILike, Not } from "typeorm";
 import bcrypt from "bcryptjs";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
+import { LocalCredential } from "../entities/LocalCredential";
 import { Payment } from "../entities/payment";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
@@ -231,6 +232,17 @@ export class UserService {
 
       const saved = await transactionalManager.getRepository(User).save(user);
 
+      // Persist password to LocalCredential model
+      try {
+        const localCred = transactionalManager.getRepository(LocalCredential).create({
+          userId: saved.id,
+          passwordHash: password_hash,
+        });
+        await transactionalManager.getRepository(LocalCredential).save(localCred);
+      } catch (credErr: any) {
+        console.warn("[UserService] LocalCredential creation notice:", credErr?.message);
+      }
+
       if (otpRecordId) {
         await otpService.linkUser(otpRecordId, saved.id, transactionalManager);
       }
@@ -323,6 +335,23 @@ export class UserService {
 
     if (dto.password) {
       user.password_hash = await bcrypt.hash(dto.password, BCRYPT_COST);
+      try {
+        const credRepo = AppDataSource.getRepository(LocalCredential);
+        let cred = await credRepo.findOne({ where: { userId: user.id } });
+        if (cred) {
+          cred.passwordHash = user.password_hash;
+          cred.updatedAt = new Date();
+          await credRepo.save(cred);
+        } else {
+          cred = credRepo.create({
+            userId: user.id,
+            passwordHash: user.password_hash,
+          });
+          await credRepo.save(cred);
+        }
+      } catch (credErr: any) {
+        console.warn("[UserService] LocalCredential update notice:", credErr?.message);
+      }
     }
 
     user.updated_at = new Date();

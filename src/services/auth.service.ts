@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import { EntityManager, IsNull } from "typeorm";
 import { AppDataSource } from "../config/data-source";
 import { User } from "../entities/User";
+import { LocalCredential } from "../entities/LocalCredential";
+import { AuthIdentity } from "../entities/AuthIdentity";
 import { PasswordResetToken } from "../entities/PasswordResetToken";
 import { OtpVerification } from "../entities/otp-verification";
 import { UserRole } from "../enums/user-role.enum";
@@ -14,11 +16,14 @@ import { getUserDetails, UserDetails } from "../utils/user-details.util";
 import { validatePasswordStrength } from "../utils/password.utils";
 import { emailService } from "./email.service";
 import { otpService } from "./otp.service";
+import { googleAuthService } from "./google-auth.service";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 
 import { generateAccessToken } from "../utils/jwt.utils";
 
 const userRepo = () => AppDataSource.getRepository(User);
+const localCredRepo = () => AppDataSource.getRepository(LocalCredential);
+const authIdentityRepo = () => AppDataSource.getRepository(AuthIdentity);
 const resetTokenRepo = () => AppDataSource.getRepository(PasswordResetToken);
 const otpRepo = () => AppDataSource.getRepository(OtpVerification);
 
@@ -55,18 +60,66 @@ export class AuthService {
     accessToken: string;
     user: SafeUserOutput;
   }> {
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await userRepo()
       .createQueryBuilder("user")
       .addSelect("user.password_hash")
-      .where("user.email = :email", { email })
+      .where("user.email = :email", { email: normalizedEmail })
       .getOne();
     if (!user) {
       throw new AppError(401, "Invalid email or password");
     }
 
-    const passwordValid = await bcrypt.compare(password, user.password_hash);
+    // 1. Look for password in LocalCredential model first
+    let passwordHash: string | null = null;
+    try {
+      const localCred = await localCredRepo()
+        .createQueryBuilder("lc")
+        .addSelect("lc.passwordHash")
+        .where("lc.userId = :userId", { userId: user.id })
+        .getOne();
+
+      if (localCred && localCred.passwordHash) {
+        passwordHash = localCred.passwordHash;
+      }
+    } catch {
+      // Non-fatal fallback to legacy hash
+    }
+
+    // 2. Fall back to legacy user.password_hash if not yet migrated
+    if (!passwordHash && user.password_hash) {
+      passwordHash = user.password_hash;
+    }
+
+    if (!passwordHash) {
+      // User registered via external provider (Google) without a local password
+      throw new AppError(
+        401,
+        "This account does not have a local password. Please sign in with Google or reset your password."
+      );
+    }
+
+    const passwordValid = await bcrypt.compare(password, passwordHash);
     if (!passwordValid) {
       throw new AppError(401, "Invalid email or password");
+    }
+
+    // 3. Migrate legacy password hash to LocalCredential if missing
+    try {
+      const existingCred = await localCredRepo().findOne({ where: { userId: user.id } });
+      if (!existingCred) {
+        const newCred = localCredRepo().create({
+          userId: user.id,
+          passwordHash,
+        });
+        await localCredRepo().save(newCred);
+      }
+    } catch {
+      // Migration failure is non-fatal for login
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new AppError(403, "Account is suspended. Please contact your administrator.");
     }
 
     user.last_login_at = new Date();
@@ -301,10 +354,28 @@ export class AuthService {
         throw new AppError(400, "User associated with this verification code could not be found.");
       }
 
-      // 3. Update password hash
+      // 3. Update password hash in User and LocalCredential model
       user.password_hash = await bcrypt.hash(password, BCRYPT_COST);
       user.updated_at = new Date();
       await transactionalManager.getRepository(User).save(user);
+
+      try {
+        const tLocalRepo = transactionalManager.getRepository(LocalCredential);
+        let cred = await tLocalRepo.findOne({ where: { userId: user.id } });
+        if (cred) {
+          cred.passwordHash = user.password_hash;
+          cred.updatedAt = new Date();
+          await tLocalRepo.save(cred);
+        } else {
+          cred = tLocalRepo.create({
+            userId: user.id,
+            passwordHash: user.password_hash,
+          });
+          await tLocalRepo.save(cred);
+        }
+      } catch (credErr: any) {
+        console.warn("[AuthService] LocalCredential update notice:", credErr?.message);
+      }
 
       // 4. Ensure OTP record links to user
       await otpService.linkUser(verifyResult.record.id, user.id, transactionalManager);
@@ -362,6 +433,23 @@ export class AuthService {
     user.password_hash = await bcrypt.hash(password, BCRYPT_COST);
     user.updated_at = new Date();
     await userRepo().save(user);
+
+    try {
+      let cred = await localCredRepo().findOne({ where: { userId: user.id } });
+      if (cred) {
+        cred.passwordHash = user.password_hash;
+        cred.updatedAt = new Date();
+        await localCredRepo().save(cred);
+      } else {
+        cred = localCredRepo().create({
+          userId: user.id,
+          passwordHash: user.password_hash,
+        });
+        await localCredRepo().save(cred);
+      }
+    } catch (credErr: any) {
+      console.warn("[AuthService] LocalCredential update notice:", credErr?.message);
+    }
 
     matchedToken.used = true;
     await resetTokenRepo().save(matchedToken);
@@ -425,19 +513,31 @@ export class AuthService {
         otpRecordId = verifyResult.record.id;
       }
 
+      const isSmsOtp = otpMethod === "sms" && !!otpRecordId;
+      const isEmailOtp = otpMethod === "email" && !!otpRecordId;
+
       const user = transactionalManager.getRepository(User).create({
         full_name: data.full_name,
         email: data.email.trim().toLowerCase(),
         password_hash,
         role,
-        phone: (data.phone || undefined) as any,
+        phone: (data.phone ? data.phone.trim() : undefined) as any,
         website: data.website || undefined,
         profileImage: data.profileImage || undefined,
         status: UserStatus.PENDING,
         is_active: false,
+        phoneVerifiedAt: isSmsOtp ? new Date() : null,
+        emailVerifiedAt: isEmailOtp ? new Date() : null,
       });
 
       const saved = await transactionalManager.getRepository(User).save(user);
+
+      // Persist password hash in LocalCredential model
+      const localCred = transactionalManager.getRepository(LocalCredential).create({
+        userId: saved.id,
+        passwordHash: password_hash,
+      });
+      await transactionalManager.getRepository(LocalCredential).save(localCred);
 
       if (otpRecordId) {
         await otpService.linkUser(otpRecordId, saved.id, transactionalManager);
@@ -462,6 +562,268 @@ export class AuthService {
         user: sanitizeUser(saved),
       };
     });
+  }
+
+  /**
+   * Google Sign-In & Registration:
+   * 1. Verifies token signature, issuer, audience, expiration, and required claims.
+   * 2. Identifies existing Google users via verified provider subject ID (sub claim).
+   * 3. Authenticates active users, rejects suspended accounts, prevents pending accounts from unrestricted access.
+   * 4. For new Google users with no conflicting email, creates User (status: active) and AuthIdentity.
+   * 5. If Google email conflicts with an existing account, strictly blocks auto-merge and requires secure account linking.
+   */
+  async googleLogin(idToken: string): Promise<{
+    accessToken: string;
+    user: SafeUserOutput;
+  }> {
+    const verified = await googleAuthService.verifyToken(idToken);
+
+    // 1. Identify existing Google users using verified provider subject ID, not email alone
+    const existingIdentity = await authIdentityRepo().findOne({
+      where: { provider: "google", providerUserId: verified.sub },
+      relations: ["user"],
+    });
+
+    if (existingIdentity) {
+      const user =
+        existingIdentity.user ||
+        (await userRepo().findOne({ where: { id: existingIdentity.userId } }));
+
+      if (!user) {
+        throw new AppError(404, "User account associated with this Google identity was not found.");
+      }
+
+      if (user.status === UserStatus.SUSPENDED) {
+        throw new AppError(403, "Account is suspended. Please contact your administrator.");
+      }
+
+      user.last_login_at = new Date();
+      user.updated_at = new Date();
+      await userRepo().save(user);
+
+      const accessToken = generateAccessToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      });
+
+      return {
+        accessToken,
+        user: sanitizeUser(user),
+      };
+    }
+
+    // 2. Identity does not exist: Check for email conflict
+    const existingUserByEmail = await userRepo().findOne({
+      where: { email: verified.email },
+    });
+
+    if (existingUserByEmail) {
+      // Do not automatically merge or link accounts.
+      throw new AppError(
+        409,
+        "An account with this email already exists. To link your Google account, please verify your existing account password."
+      );
+    }
+
+    // 3. New Google identity: Safely create User and AuthIdentity in a transaction
+    return await AppDataSource.transaction(async (transactionalManager) => {
+      const tUserRepo = transactionalManager.getRepository(User);
+      const tIdentityRepo = transactionalManager.getRepository(AuthIdentity);
+
+      // Concurrency check within transaction
+      const raceIdentity = await tIdentityRepo.findOne({
+        where: { provider: "google", providerUserId: verified.sub },
+      });
+      if (raceIdentity) {
+        const raceUser = await tUserRepo.findOne({ where: { id: raceIdentity.userId } });
+        if (!raceUser) throw new AppError(404, "User account not found");
+        if (raceUser.status === UserStatus.SUSPENDED) {
+          throw new AppError(403, "Account is suspended. Please contact your administrator.");
+        }
+        raceUser.last_login_at = new Date();
+        await tUserRepo.save(raceUser);
+        const accessToken = generateAccessToken({
+          id: raceUser.id,
+          email: raceUser.email,
+          role: raceUser.role,
+          status: raceUser.status,
+        });
+        return { accessToken, user: sanitizeUser(raceUser) };
+      }
+
+      const raceEmailUser = await tUserRepo.findOne({ where: { email: verified.email } });
+      if (raceEmailUser) {
+        throw new AppError(
+          409,
+          "An account with this email already exists. To link your Google account, please verify your existing account password."
+        );
+      }
+
+      const newUser = tUserRepo.create({
+        full_name: verified.name,
+        email: verified.email,
+        status: UserStatus.ACTIVE,
+        is_active: true,
+        role: UserRole.User,
+        profileImage: verified.picture,
+        phone: null,
+        password_hash: null,
+        phoneVerifiedAt: null,
+        emailVerifiedAt: new Date(),
+        last_login_at: new Date(),
+      });
+
+      const savedUser = await tUserRepo.save(newUser);
+
+      const newIdentity = tIdentityRepo.create({
+        userId: savedUser.id,
+        provider: "google",
+        providerUserId: verified.sub,
+      });
+
+      await tIdentityRepo.save(newIdentity);
+
+      try {
+        await emailService.sendWelcomeEmail(savedUser.email, savedUser.full_name);
+      } catch (e: any) {
+        console.warn("[AuthService] Welcome email notice for Google user:", e?.message);
+      }
+
+      const accessToken = generateAccessToken({
+        id: savedUser.id,
+        email: savedUser.email,
+        role: savedUser.role,
+        status: savedUser.status,
+      });
+
+      return {
+        accessToken,
+        user: sanitizeUser(savedUser),
+      };
+    });
+  }
+
+  /**
+   * Secure Google Account Linking:
+   * When a Google email conflicts with an existing email/phone password account,
+   * the user verifies their existing account password to securely establish the link.
+   */
+  async linkGoogleAccount(
+    idToken: string,
+    password: string
+  ): Promise<{
+    accessToken: string;
+    user: SafeUserOutput;
+    message: string;
+  }> {
+    const verified = await googleAuthService.verifyToken(idToken);
+
+    // Locate existing account by verified email
+    const user = await userRepo()
+      .createQueryBuilder("user")
+      .addSelect("user.password_hash")
+      .where("user.email = :email", { email: verified.email })
+      .getOne();
+
+    if (!user) {
+      throw new AppError(404, "No account found with this email to link.");
+    }
+
+    if (user.status === UserStatus.SUSPENDED) {
+      throw new AppError(403, "Account is suspended. Please contact your administrator.");
+    }
+
+    // Verify existing password against LocalCredential or legacy user.password_hash
+    let passwordHash: string | null = null;
+    const localCred = await localCredRepo()
+      .createQueryBuilder("lc")
+      .addSelect("lc.passwordHash")
+      .where("lc.userId = :userId", { userId: user.id })
+      .getOne();
+
+    if (localCred && localCred.passwordHash) {
+      passwordHash = localCred.passwordHash;
+    } else if (user.password_hash) {
+      passwordHash = user.password_hash;
+    }
+
+    if (!passwordHash) {
+      throw new AppError(400, "Account has no password configured. Please contact support.");
+    }
+
+    const passwordValid = await bcrypt.compare(password, passwordHash);
+    if (!passwordValid) {
+      throw new AppError(401, "Invalid password. Could not link account.");
+    }
+
+    // Check if this Google identity is already associated with an account
+    const existingIdentity = await authIdentityRepo().findOne({
+      where: { provider: "google", providerUserId: verified.sub },
+    });
+
+    if (existingIdentity) {
+      if (existingIdentity.userId === user.id) {
+        // Already linked to this user
+        user.last_login_at = new Date();
+        await userRepo().save(user);
+        const accessToken = generateAccessToken({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+        });
+        return {
+          accessToken,
+          user: sanitizeUser(user),
+          message: "Account already linked.",
+        };
+      }
+      throw new AppError(409, "This Google identity is already linked to another account.");
+    }
+
+    // Link identity in transaction
+    await AppDataSource.transaction(async (transactionalManager) => {
+      const tIdentityRepo = transactionalManager.getRepository(AuthIdentity);
+      const tLocalRepo = transactionalManager.getRepository(LocalCredential);
+      const tUserRepo = transactionalManager.getRepository(User);
+
+      const identity = tIdentityRepo.create({
+        userId: user.id,
+        provider: "google",
+        providerUserId: verified.sub,
+      });
+      await tIdentityRepo.save(identity);
+
+      if (!localCred && user.password_hash) {
+        const newCred = tLocalRepo.create({
+          userId: user.id,
+          passwordHash: user.password_hash,
+        });
+        await tLocalRepo.save(newCred);
+      }
+
+      if (!user.emailVerifiedAt) {
+        user.emailVerifiedAt = new Date();
+      }
+      user.last_login_at = new Date();
+      user.updated_at = new Date();
+      await tUserRepo.save(user);
+    });
+
+    const accessToken = generateAccessToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    });
+
+    return {
+      accessToken,
+      user: sanitizeUser(user),
+      message: "Google account successfully linked.",
+    };
   }
 
   async getMe(userId: string): Promise<UserDetails> {

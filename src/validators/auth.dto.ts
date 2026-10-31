@@ -85,3 +85,19 @@ export class RegisterDto {
   })
   otpMethod?: "sms" | "email";
 }
+
+export class GoogleAuthDto {
+  @IsString()
+  @Length(10, 8192)
+  idToken: string;
+}
+
+export class GoogleLinkDto {
+  @IsString()
+  @Length(10, 8192)
+  idToken: string;
+
+  @IsString()
+  @Length(6, 128)
+  password: string;
+}

@@ -3,6 +3,7 @@ import { UserStatus } from "../enums/user-status.enum";
 
 export interface SafeUserOutput {
   id: string;
+  name?: string;
   full_name: string;
   fullName?: string;
   email: string;
@@ -12,6 +13,9 @@ export interface SafeUserOutput {
   profile_image?: string | null;
   avatar?: string | null;
   phone: string | null;
+  phoneNumber?: string | null;
+  phoneVerifiedAt?: Date | null;
+  emailVerifiedAt?: Date | null;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -24,11 +28,15 @@ export interface SafeUserOutput {
 
 export interface AdminUserOutput {
   id: string;
+  name?: string;
   full_name: string;
   fullName: string;
   email: string;
   role: string;
   phone: string | null;
+  phoneNumber?: string | null;
+  phoneVerifiedAt?: Date | null;
+  emailVerifiedAt?: Date | null;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -51,6 +59,7 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
   const image = user.profileImage ?? null;
   return {
     id: user.id,
+    name: user.name || user.full_name,
     full_name: user.full_name,
     fullName: user.full_name,
     email: user.email,
@@ -60,6 +69,9 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
     profile_image: image,
     avatar: image,
     phone: user.phone ?? null,
+    phoneNumber: user.phoneNumber || user.phone || null,
+    phoneVerifiedAt: user.phoneVerifiedAt ?? null,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,
@@ -76,11 +88,15 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
   const image = user.profileImage ?? null;
   return {
     id: user.id,
+    name: user.name || user.full_name,
     full_name: user.full_name,
     fullName: user.full_name,
     email: user.email,
     role: user.role,
     phone: user.phone ?? null,
+    phoneNumber: user.phoneNumber || user.phone || null,
+    phoneVerifiedAt: user.phoneVerifiedAt ?? null,
+    emailVerifiedAt: user.emailVerifiedAt ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,

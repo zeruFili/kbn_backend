@@ -7,6 +7,11 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node dist/app.js",
+    "typeorm": "typeorm-ts-node-commonjs -d src/config/data-source.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts",
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/config/data-source.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/data-source.ts",
     "telegram:login": "ts-node src/modules/telegram/login.ts",
     "test:telegram": "ts-node src/tests/telegram-sender.test.ts",
     "test:role-payment": "ts-node src/tests/role-payment.test.ts",
@@ -14,7 +19,8 @@
     "test:bank-response": "ts-node src/tests/bank-response.test.ts",
     "test:event-registration": "ts-node src/tests/event-registration.test.ts",
     "test:user-profile-image": "ts-node src/tests/user-profile-image.test.ts",
-    "test:otp": "ts-node src/tests/otp-verification.test.ts"
+    "test:otp": "ts-node src/tests/otp-verification.test.ts",
+    "test:google-auth": "ts-node src/tests/google-auth.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -24,6 +30,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.1",
     "express-rate-limit": "^8.6.0",
+    "google-auth-library": "^11.3.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^9.0.3",

@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { AppDataSource } from "../config/data-source";
 import { OtpVerification } from "../entities/otp-verification";
 import { User } from "../entities/User";
+import { LocalCredential } from "../entities/LocalCredential";
+import { AuthIdentity } from "../entities/AuthIdentity";
 import { PasswordResetToken } from "../entities/PasswordResetToken";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { UserRole } from "../enums/user-role.enum";
@@ -45,10 +47,14 @@ export async function runOtpVerificationTests() {
   // Mock emailService.sendOtpEmail to capture email OTP dispatches
   const originalSendOtpEmail = emailService.sendOtpEmail;
   const originalSendWelcomeEmail = emailService.sendWelcomeEmail;
+  const originalSendPasswordResetEmail = emailService.sendPasswordResetEmail;
+  const originalSendResetSuccessEmail = emailService.sendResetSuccessEmail;
   (emailService as any).sendOtpEmail = async (to: string, userName: string, otp: string, purpose: string) => {
     sentEmailOtps.push({ to, otp, purpose });
   };
   (emailService as any).sendWelcomeEmail = async (_to: string, _name: string) => {};
+  (emailService as any).sendPasswordResetEmail = async (_to: string, _name: string, _token: string) => {};
+  (emailService as any).sendResetSuccessEmail = async (_to: string) => {};
 
   // Mock repository for OtpVerification
   const mockOtpRepo: any = {
@@ -204,11 +210,69 @@ export async function runOtpVerificationTests() {
     find: async () => [],
   };
 
+  const localCredsDb: any[] = [];
+  const mockLocalCredRepo: any = {
+    create: (d: any) => ({
+      id: "cred-" + Math.random().toString(36).substring(2, 9),
+      createdAt: new Date(),
+      ...d,
+    }),
+    save: async (entity: any) => {
+      const idx = localCredsDb.findIndex((c) => c.userId === entity.userId);
+      if (idx >= 0) localCredsDb[idx] = entity;
+      else localCredsDb.push(entity);
+      return entity;
+    },
+    findOne: async (options: { where: any }) => {
+      return (
+        localCredsDb.find((item) =>
+          Object.keys(options.where).every((key) => (item as any)[key] === options.where[key])
+        ) || null
+      );
+    },
+    createQueryBuilder: () => {
+      let filtered = [...localCredsDb];
+      const qb: any = {
+        addSelect: () => qb,
+        where: (condition: string, params: any) => {
+          if (params.userId) {
+            filtered = filtered.filter((c) => c.userId === params.userId);
+          }
+          return qb;
+        },
+        getOne: async () => filtered[0] || null,
+      };
+      return qb;
+    },
+  };
+
+  const authIdentitiesDb: any[] = [];
+  const mockAuthIdentityRepo: any = {
+    create: (d: any) => ({
+      id: "identity-" + Math.random().toString(36).substring(2, 9),
+      createdAt: new Date(),
+      ...d,
+    }),
+    save: async (entity: any) => {
+      authIdentitiesDb.push(entity);
+      return entity;
+    },
+    findOne: async (options: { where: any }) => {
+      return (
+        authIdentitiesDb.find((item) =>
+          Object.keys(options.where).every((key) => (item as any)[key] === options.where[key])
+        ) || null
+      );
+    },
+  };
+
   const originalGetRepository = AppDataSource.getRepository;
   (AppDataSource as any).getRepository = (entity: any) => {
     if (entity === OtpVerification) return mockOtpRepo;
     if (entity === User) return mockUserRepo;
     if (entity === PasswordResetToken) return mockResetTokenRepo;
+    if (entity === LocalCredential) return mockLocalCredRepo;
+    if (entity === AuthIdentity) return mockAuthIdentityRepo;
     return originalGetRepository.call(AppDataSource, entity);
   };
 
@@ -218,6 +282,9 @@ export async function runOtpVerificationTests() {
       getRepository: (entity: any) => {
         if (entity === OtpVerification) return mockOtpRepo;
         if (entity === User) return mockUserRepo;
+        if (entity === PasswordResetToken) return mockResetTokenRepo;
+        if (entity === LocalCredential) return mockLocalCredRepo;
+        if (entity === AuthIdentity) return mockAuthIdentityRepo;
         return originalGetRepository.call(AppDataSource, entity);
       },
     };
@@ -775,6 +842,8 @@ export async function runOtpVerificationTests() {
     (ethioSmsModule as any).sendEthioSms = originalSendEthioSms;
     (emailService as any).sendOtpEmail = originalSendOtpEmail;
     (emailService as any).sendWelcomeEmail = originalSendWelcomeEmail;
+    (emailService as any).sendPasswordResetEmail = originalSendPasswordResetEmail;
+    (emailService as any).sendResetSuccessEmail = originalSendResetSuccessEmail;
   }
 }
 

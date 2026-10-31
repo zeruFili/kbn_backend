@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
+
+dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "default_secret";
 const ACCESS_TOKEN_TTL = (process.env.ACCESS_TOKEN_TTL || "15m") as jwt.SignOptions["expiresIn"];

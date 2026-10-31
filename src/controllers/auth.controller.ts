@@ -5,7 +5,14 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { AppError } from "../middlewares/error.middleware";
 import { authService } from "../services/auth.service";
 import { otpService } from "../services/otp.service";
-import { LoginDto, ForgotPasswordDto, ResetPasswordDto, RegisterDto } from "../validators/auth.dto";
+import {
+  LoginDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  RegisterDto,
+  GoogleAuthDto,
+  GoogleLinkDto,
+} from "../validators/auth.dto";
 import { SendOtpDto, VerifyOtpDto, ResetPasswordWithOtpDto } from "../validators/otp.dto";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
 import { recordLoginFailure } from "../middlewares/login-rate-limit.middleware";
@@ -307,6 +314,78 @@ export class AuthController {
         return;
       }
       console.error("Reset password error:", err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
+  async googleAuth(req: Request, res: Response): Promise<void> {
+    try {
+      const dto = plainToInstance(GoogleAuthDto, req.body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await authService.googleLogin(dto.idToken);
+      res.status(200).json({
+        success: true,
+        message: "Google authentication successful",
+        accessToken: result.accessToken,
+        data: {
+          ...result.user,
+          accessToken: result.accessToken,
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        if (err.statusCode === 409) {
+          res.status(409).json({
+            success: false,
+            conflict: true,
+            code: "ACCOUNT_EXISTS_LINK_REQUIRED",
+            message: err.message,
+          });
+          return;
+        }
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("[AuthController] Google auth error:", err?.message || err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
+  async linkGoogleAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const dto = plainToInstance(GoogleLinkDto, req.body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await authService.linkGoogleAccount(dto.idToken, dto.password);
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        accessToken: result.accessToken,
+        data: {
+          ...result.user,
+          accessToken: result.accessToken,
+        },
+      });
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        if (err.statusCode === 401) {
+          recordLoginFailure(req);
+        }
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("[AuthController] Google link error:", err?.message || err);
       res.status(500).json({ success: false, message: "Internal server error" });
     }
   }

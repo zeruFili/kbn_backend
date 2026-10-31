@@ -22,6 +22,7 @@ router.post("/google/link", loginLimiter, (req, res) => authController.linkGoogl
 router.post("/forgot-password", forgotPasswordLimiter, (req, res) => authController.forgotPassword(req, res));
 router.post("/reset-password", resetPasswordLimiter, (req, res) => authController.resetPassword(req, res));
 router.post("/reset-password/:token", resetPasswordLimiter, (req, res) => authController.resetPassword(req, res));
+router.post("/set-password", authenticate, resetPasswordLimiter, (req, res) => authController.setPassword(req, res));
 router.get("/me", authenticate, (req, res) => authController.getMe(req, res));
 
 export default router;

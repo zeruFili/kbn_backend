@@ -654,7 +654,101 @@ export async function runGoogleAuthTests() {
     assert.ok(controllerBody.accessToken);
     console.log("  ✓ Passed: AuthController correctly maps 200 OK, 409 Conflict, and account linking\n");
 
-    console.log("All 10 Google Authentication & Architecture Tests Passed Successfully! 🚀\n");
+    // -------------------------------------------------------------
+    // Test 11: Set Password for Google User and Enable Dual Login
+    // -------------------------------------------------------------
+    console.log("Test 11: Set Password for Google User and Dual-Login Support");
+    const googleUser = usersDb.find((u) => u.email === newGoogleEmail)!;
+    assert.ok(googleUser, "Google user from Test 1 must exist");
+
+    // Verify user cannot log in with password initially
+    let noPassCaught = false;
+    try {
+      await authService.login(newGoogleEmail, "SomeRandomPass123!");
+    } catch (err: any) {
+      noPassCaught = true;
+      assert.strictEqual(err.statusCode, 401);
+      assert.ok(err.message.includes("does not have a local password"));
+    }
+    assert.ok(noPassCaught, "Passwordless Google user must be rejected with helpful message");
+
+    // Google user sets local password for the first time (no currentPassword needed)
+    const setPassResult = await authService.setPassword(googleUser.id, {
+      password: "MySecurePassword123!",
+      confirmPassword: "MySecurePassword123!",
+    });
+    assert.strictEqual(setPassResult.hasPassword, true);
+    assert.ok(setPassResult.message.includes("Password set successfully"));
+
+    // Google user can now log in using email and the new password!
+    const localLoginResult = await authService.login(newGoogleEmail, "MySecurePassword123!");
+    assert.ok(localLoginResult.accessToken);
+    assert.strictEqual(localLoginResult.user.email, newGoogleEmail);
+
+    // Changing password now requires current password
+    let missingCurrentCaught = false;
+    try {
+      await authService.setPassword(googleUser.id, {
+        password: "NewPassword456!",
+        confirmPassword: "NewPassword456!",
+      });
+    } catch (err: any) {
+      missingCurrentCaught = true;
+      assert.strictEqual(err.statusCode, 400);
+      assert.ok(err.message.includes("Current password is required"));
+    }
+    assert.ok(missingCurrentCaught, "Existing password change must require current password");
+
+    // Changing password with wrong current password is rejected
+    let wrongCurrentCaught = false;
+    try {
+      await authService.setPassword(googleUser.id, {
+        currentPassword: "WrongCurrentPassword123!",
+        password: "NewPassword456!",
+        confirmPassword: "NewPassword456!",
+      });
+    } catch (err: any) {
+      wrongCurrentCaught = true;
+      assert.strictEqual(err.statusCode, 401);
+      assert.ok(err.message.includes("Current password is incorrect"));
+    }
+    assert.ok(wrongCurrentCaught, "Incorrect current password must be rejected");
+
+    // Changing password with correct current password succeeds via controller
+    let setPassCtrlStatus = 0;
+    let setPassCtrlBody: any = null;
+    const mockSetPassRes: any = {
+      status(code: number) {
+        setPassCtrlStatus = code;
+        return this;
+      },
+      json(body: any) {
+        setPassCtrlBody = body;
+        return this;
+      },
+    };
+
+    await authController.setPassword(
+      {
+        user: { id: googleUser.id, status: googleUser.status, role: googleUser.role },
+        body: {
+          currentPassword: "MySecurePassword123!",
+          password: "NewUpdatedPassword456!",
+          confirmPassword: "NewUpdatedPassword456!",
+        },
+      } as any,
+      mockSetPassRes
+    );
+    assert.strictEqual(setPassCtrlStatus, 200);
+    assert.strictEqual(setPassCtrlBody.success, true);
+    assert.strictEqual(setPassCtrlBody.data.hasPassword, true);
+
+    // Verify login with updated password
+    const updatedLoginResult = await authService.login(newGoogleEmail, "NewUpdatedPassword456!");
+    assert.ok(updatedLoginResult.accessToken);
+    console.log("  ✓ Passed: Google user successfully sets password and logs in via both Google and email/password\n");
+
+    console.log("All 11 Google Authentication & Architecture Tests Passed Successfully! 🚀\n");
   } finally {
     AppDataSource.getRepository = originalGetRepository;
     AppDataSource.transaction = originalTransaction;

@@ -12,6 +12,7 @@ import {
   RegisterDto,
   GoogleAuthDto,
   GoogleLinkDto,
+  SetPasswordDto,
 } from "../validators/auth.dto";
 import { SendOtpDto, VerifyOtpDto, ResetPasswordWithOtpDto } from "../validators/otp.dto";
 import { OtpPurpose } from "../enums/otp-purpose.enum";
@@ -386,6 +387,42 @@ export class AuthController {
         return;
       }
       console.error("[AuthController] Google link error:", err?.message || err);
+      res.status(500).json({ success: false, message: "Internal server error" });
+    }
+  }
+
+  async setPassword(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, message: "Unauthorized" });
+        return;
+      }
+
+      const dto = plainToInstance(SetPasswordDto, req.body);
+      const errors = await validate(dto);
+      if (errors.length > 0) {
+        const messages = errors.map((e) => Object.values(e.constraints ?? {})).flat();
+        res.status(400).json({ success: false, message: "Validation failed", errors: messages });
+        return;
+      }
+
+      const result = await authService.setPassword(req.user.id, {
+        currentPassword: dto.currentPassword,
+        password: dto.password,
+        confirmPassword: dto.confirmPassword,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      if (err instanceof AppError) {
+        res.status(err.statusCode).json({ success: false, message: err.message });
+        return;
+      }
+      console.error("[AuthController] Set password error:", err?.message || err);
       res.status(500).json({ success: false, message: "Internal server error" });
     }
   }

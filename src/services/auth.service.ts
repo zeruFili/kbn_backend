@@ -826,6 +826,78 @@ export class AuthService {
     };
   }
 
+  async setPassword(
+    userId: string,
+    data: { currentPassword?: string; password: string; confirmPassword: string }
+  ): Promise<{ message: string; hasPassword: boolean }> {
+    if (data.password !== data.confirmPassword) {
+      throw new AppError(400, "Passwords do not match");
+    }
+
+    const passwordValidation = validatePasswordStrength(data.password);
+    if (!passwordValidation.valid) {
+      throw new AppError(400, passwordValidation.errors.join("; "));
+    }
+
+    const user = await userRepo().findOne({ where: { id: userId } });
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    // Check if user currently has a password in LocalCredential or user.password_hash
+    let existingHash: string | null = null;
+    const existingCred = await localCredRepo()
+      .createQueryBuilder("lc")
+      .addSelect("lc.passwordHash")
+      .where("lc.userId = :userId", { userId })
+      .getOne();
+
+    if (existingCred && existingCred.passwordHash) {
+      existingHash = existingCred.passwordHash;
+    } else if (user.password_hash) {
+      existingHash = user.password_hash;
+    }
+
+    // If user already has a password, current password is required and must match
+    if (existingHash) {
+      if (!data.currentPassword) {
+        throw new AppError(400, "Current password is required to change password");
+      }
+      const isMatch = await bcrypt.compare(data.currentPassword, existingHash);
+      if (!isMatch) {
+        throw new AppError(401, "Current password is incorrect");
+      }
+    }
+
+    // Hash the new password
+    const newPasswordHash = await bcrypt.hash(data.password, BCRYPT_COST);
+
+    // Save/update LocalCredential
+    if (existingCred) {
+      existingCred.passwordHash = newPasswordHash;
+      existingCred.updatedAt = new Date();
+      await localCredRepo().save(existingCred);
+    } else {
+      const newCred = localCredRepo().create({
+        userId: user.id,
+        passwordHash: newPasswordHash,
+      });
+      await localCredRepo().save(newCred);
+    }
+
+    // Also update legacy hash on user for compatibility
+    user.password_hash = newPasswordHash;
+    user.updated_at = new Date();
+    await userRepo().save(user);
+
+    return {
+      message: existingHash
+        ? "Password changed successfully"
+        : "Password set successfully. You can now log in using either Google or your email and password.",
+      hasPassword: true,
+    };
+  }
+
   async getMe(userId: string): Promise<UserDetails> {
     const user = await getUserDetails(userId);
     if (!user) {

@@ -101,3 +101,17 @@ export class GoogleLinkDto {
   @Length(6, 128)
   password: string;
 }
+
+export class SetPasswordDto {
+  @IsOptional()
+  @IsString()
+  currentPassword?: string;
+
+  @IsString()
+  @Length(6, 128)
+  password: string;
+
+  @IsString()
+  @Length(6, 128)
+  confirmPassword: string;
+}

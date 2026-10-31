@@ -16,6 +16,7 @@ export interface SafeUserOutput {
   phoneNumber?: string | null;
   phoneVerifiedAt?: Date | null;
   emailVerifiedAt?: Date | null;
+  hasPassword?: boolean;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -37,6 +38,7 @@ export interface AdminUserOutput {
   phoneNumber?: string | null;
   phoneVerifiedAt?: Date | null;
   emailVerifiedAt?: Date | null;
+  hasPassword?: boolean;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -72,6 +74,7 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
     phoneNumber: user.phoneNumber || user.phone || null,
     phoneVerifiedAt: user.phoneVerifiedAt ?? null,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
+    hasPassword: Boolean(user.localCredential?.passwordHash || user.password_hash),
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,
@@ -97,6 +100,7 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
     phoneNumber: user.phoneNumber || user.phone || null,
     phoneVerifiedAt: user.phoneVerifiedAt ?? null,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
+    hasPassword: Boolean(user.localCredential?.passwordHash || user.password_hash),
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,

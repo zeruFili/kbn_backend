@@ -664,8 +664,8 @@ export class AuthService {
       const newUser = tUserRepo.create({
         full_name: verified.name,
         email: verified.email,
-        status: UserStatus.ACTIVE,
-        is_active: true,
+        status: UserStatus.PENDING,
+        is_active: false,
         role: UserRole.User,
         profileImage: verified.picture,
         phone: null,

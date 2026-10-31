@@ -209,14 +209,14 @@ export async function runGoogleAuthTests() {
     assert.ok(regResult.accessToken, "Registration must return access token");
     assert.strictEqual(regResult.user.email, newGoogleEmail);
     assert.strictEqual(regResult.user.full_name, "New Google Builder");
-    assert.strictEqual(regResult.user.status, UserStatus.ACTIVE, "Google user status must default to active");
+    assert.strictEqual(regResult.user.status, UserStatus.PENDING, "Google user status must default to pending");
     assert.strictEqual(regResult.user.profileImage, "https://lh3.googleusercontent.com/a/avatar-newbuilder");
 
     // Verify User record in DB
     const savedUser = usersDb.find((u) => u.email === newGoogleEmail);
     assert.ok(savedUser, "User record must exist in DB");
-    assert.strictEqual(savedUser.status, UserStatus.ACTIVE);
-    assert.strictEqual(savedUser.is_active, true);
+    assert.strictEqual(savedUser.status, UserStatus.PENDING);
+    assert.strictEqual(savedUser.is_active, false);
     assert.strictEqual(savedUser.phone, null, "Phone is optional for Google users");
     assert.strictEqual(savedUser.password_hash, null, "Google users do not require local password");
     assert.strictEqual(savedUser.phoneVerifiedAt, null);
@@ -235,8 +235,8 @@ export async function runGoogleAuthTests() {
     const decodedJwt = verifyAccessToken(regResult.accessToken);
     assert.strictEqual(decodedJwt.sub, savedUser.id);
     assert.strictEqual(decodedJwt.email, newGoogleEmail);
-    assert.strictEqual(decodedJwt.status, UserStatus.ACTIVE);
-    console.log("  ✓ Passed: Google registration creates active user, AuthIdentity, and valid JWT without OTP/password\n");
+    assert.strictEqual(decodedJwt.status, UserStatus.PENDING);
+    console.log("  ✓ Passed: Google registration creates pending user, AuthIdentity, and valid JWT without OTP/password\n");
 
     // -------------------------------------------------------------
     // Test 2: Google Login via provider subject ID (sub claim)
@@ -255,12 +255,15 @@ export async function runGoogleAuthTests() {
     // Test 3: Token Validation (Signatures, Issuers, Expiration, Required Claims)
     // -------------------------------------------------------------
     console.log("Test 3: Token Signature & Claims Validation");
+    const origClientId = googleAuthService.getClientId();
+    const testAudience = origClientId || "client-id";
+
     // Missing sub claim
     assert.throws(
       () =>
         googleAuthService.validatePayload({
           iss: "https://accounts.google.com",
-          aud: "client-id",
+          aud: testAudience,
           sub: "",
           email: "test@gmail.com",
           email_verified: true,
@@ -273,7 +276,7 @@ export async function runGoogleAuthTests() {
       () =>
         googleAuthService.validatePayload({
           iss: "https://evil-attacker.com",
-          aud: "client-id",
+          aud: testAudience,
           sub: "sub-123",
           email: "test@gmail.com",
           email_verified: true,
@@ -287,7 +290,7 @@ export async function runGoogleAuthTests() {
       () =>
         googleAuthService.validatePayload({
           iss: "accounts.google.com",
-          aud: "client-id",
+          aud: testAudience,
           sub: "sub-123",
           exp: pastExp,
           email: "test@gmail.com",
@@ -301,7 +304,7 @@ export async function runGoogleAuthTests() {
       () =>
         googleAuthService.validatePayload({
           iss: "https://accounts.google.com",
-          aud: "client-id",
+          aud: testAudience,
           sub: "sub-123",
           exp: Math.floor(Date.now() / 1000) + 300,
           email: "unverified@gmail.com",
@@ -324,7 +327,7 @@ export async function runGoogleAuthTests() {
         } as any),
       (err: any) => err.statusCode === 401 && err.message.includes("client ID mismatch")
     );
-    googleAuthService.setAllowedClientId(undefined); // Reset
+    googleAuthService.setAllowedClientId(origClientId); // Reset
     console.log("  ✓ Passed: Token validator enforces sub, issuer, expiration, email_verified, and audience\n");
 
     // -------------------------------------------------------------

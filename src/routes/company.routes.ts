@@ -17,6 +17,7 @@ const companyUploadMiddleware = createUploadFieldsMiddleware({
     { name: "license", maxCount: 1 },
   ],
   subfolder: "companys",
+  allowAnyTypeFields: ["business_license", "license"],
 });
 
 // Listing and details

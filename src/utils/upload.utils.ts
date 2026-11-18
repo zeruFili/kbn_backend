@@ -51,11 +51,13 @@ function ensureUploadDir(subfolder: string): string {
 }
 
 function generateUniqueFileName(originalName: string): string {
-  const ext = path.extname(originalName);
-  const baseName = path
-    .basename(originalName, ext)
-    .replace(/[^a-zA-Z0-9_\-.]/g, "_")
-    .slice(0, 100);
+  const rawExt = path.extname(originalName);
+  const ext = rawExt.replace(/[^a-zA-Z0-9.]/g, "").slice(0, 20);
+  const baseName =
+    path
+      .basename(originalName, rawExt)
+      .replace(/[^a-zA-Z0-9_\-.]/g, "_")
+      .slice(0, 100) || "file";
   const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   return `${baseName}-${uniqueSuffix}${ext}`;
 }
@@ -166,6 +168,8 @@ export interface UploadFieldsMiddlewareOptions {
   fields: UploadFieldOption[];
   subfolder: string;
   allowedTypes?: Set<string>;
+  allowAnyType?: boolean;
+  allowAnyTypeFields?: string[];
   fileSizeLimit?: number;
 }
 
@@ -174,8 +178,12 @@ export function createUploadFieldsMiddleware(options: UploadFieldsMiddlewareOpti
     fields,
     subfolder,
     allowedTypes = ALLOWED_MIME_TYPES,
+    allowAnyType = false,
+    allowAnyTypeFields = [],
     fileSizeLimit = MAX_FILE_SIZE,
   } = options;
+
+  const anyTypeFieldSet = new Set(allowAnyTypeFields);
 
   const totalMaxCount =
     fields.reduce((sum, f) => sum + (f.maxCount || 1), 0) || 10;
@@ -195,7 +203,11 @@ export function createUploadFieldsMiddleware(options: UploadFieldsMiddlewareOpti
     storage,
     limits: { fileSize: fileSizeLimit },
     fileFilter: (_req, file, cb) => {
-      if (allowedTypes.has(file.mimetype)) {
+      if (
+        allowAnyType ||
+        anyTypeFieldSet.has(file.fieldname) ||
+        allowedTypes.has(file.mimetype)
+      ) {
         cb(null, true);
       } else {
         cb(new Error(`File type '${file.mimetype}' is not allowed`));

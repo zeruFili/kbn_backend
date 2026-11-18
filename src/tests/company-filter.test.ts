@@ -295,6 +295,76 @@ async function runCompanyFilterTests() {
       (companyService as any).findById = originalFindById;
     }
 
+    // -------------------------------------------------------------
+    // 10. companyService.create allows duplicate company email addresses
+    // -------------------------------------------------------------
+    console.log("Test 10: Multiple companies can be registered with the same email");
+    const savedCompanies: any[] = [];
+    const mockCategoryRepo = {
+      async findOne() {
+        return { id: "00000000-0000-4000-8000-000000000010", name: "Technology" };
+      },
+    };
+    const mockCompanyCreateRepo = {
+      createQueryBuilder: () => mockQueryBuilder,
+      create(data: any) {
+        return { id: `company-${savedCompanies.length + 1}`, ...data };
+      },
+      async save(entity: any) {
+        savedCompanies.push(entity);
+        return entity;
+      },
+      async findOne({ where }: any) {
+        if (where?.id) {
+          return savedCompanies.find((c) => c.id === where.id) || null;
+        }
+        return savedCompanies[0] || null;
+      },
+    };
+
+    const prevGetRepo = AppDataSource.getRepository;
+    (AppDataSource as any).getRepository = (entity: any) => {
+      if (entity === Company) return mockCompanyCreateRepo;
+      if (entity?.name === "Category") return mockCategoryRepo;
+      return prevGetRepo.call(AppDataSource, entity);
+    };
+
+    try {
+      const sharedEmail = "shared@company.com";
+      const first = await companyService.create(
+        {
+          company_name: "Company One",
+          business_category_id: "00000000-0000-4000-8000-000000000010",
+          owner_primary_contact: "Owner One",
+          email: sharedEmail,
+          phone_number: "+251911000001",
+          physical_address: "Addis Ababa",
+          description: "First business",
+          business_license: "/uploads/companys/lic1.pdf",
+        },
+        "owner-1"
+      );
+      const second = await companyService.create(
+        {
+          company_name: "Company Two",
+          business_category_id: "00000000-0000-4000-8000-000000000010",
+          owner_primary_contact: "Owner One",
+          email: sharedEmail,
+          phone_number: "+251911000002",
+          physical_address: "Addis Ababa",
+          description: "Second business",
+          business_license: "/uploads/companys/lic2.pdf",
+        },
+        "owner-1"
+      );
+      assert.strictEqual(first.email, sharedEmail);
+      assert.strictEqual(second.email, sharedEmail);
+      assert.strictEqual(savedCompanies.length, 2);
+      console.log("  ✓ Passed: Duplicate official email allowed across multiple companies");
+    } finally {
+      (AppDataSource as any).getRepository = prevGetRepo;
+    }
+
     console.log("\nALL COMPANY FILTER TESTS PASSED SUCCESSFULLY! ✓");
   } finally {
     AppDataSource.getRepository = originalGetRepository;

@@ -28,7 +28,7 @@ export class Company {
   @Column({ type: "varchar", length: 255 })
   owner_primary_contact: string;
 
-  @Index({ unique: true })
+  @Index()
   @Column({ type: "varchar", length: 255 })
   email: string;
 

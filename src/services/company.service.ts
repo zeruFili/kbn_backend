@@ -180,13 +180,6 @@ export class CompanyService {
       throw new AppError(400, "Invalid business category ID: category does not exist");
     }
 
-    const existingEmail = await repo().findOne({
-      where: { email: dto.email },
-    });
-    if (existingEmail) {
-      throw new AppError(409, "A company with this email already exists");
-    }
-
     const status = dto.status ?? CompanyStatus.ACTIVE;
     const is_active =
       dto.is_active !== undefined
@@ -251,13 +244,6 @@ export class CompanyService {
       });
       if (!category) {
         throw new AppError(400, "Invalid business category ID: category does not exist");
-      }
-    }
-
-    if (dto.email && dto.email.toLowerCase() !== company.email.toLowerCase()) {
-      const existing = await repo().findOne({ where: { email: dto.email } });
-      if (existing && existing.id !== id) {
-        throw new AppError(409, "A company with this email already exists");
       }
     }
 

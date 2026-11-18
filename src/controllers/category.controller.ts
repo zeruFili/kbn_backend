@@ -72,15 +72,21 @@ export class CategoryController {
 
   async create(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
+      const rawBodyIcon =
+        typeof req.body.icon === "string" ? req.body.icon.trim() : undefined;
       const iconPath =
         getUploadedFilePath(req, "icon", "categories") ||
         getUploadedFilePath(req, "attachmentFiles", "categories") ||
-        req.body.icon;
+        (rawBodyIcon || undefined);
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...req.body,
-        ...(iconPath ? { icon: iconPath } : {}),
       };
+      if (iconPath) {
+        payload.icon = iconPath;
+      } else {
+        delete payload.icon;
+      }
 
       const dto = await validateContentDto(CreateCategoryDto, payload);
       const category = await categoryService.create(dto);
@@ -99,15 +105,21 @@ export class CategoryController {
   async update(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = contentResourceId(req);
+      const rawBodyIcon =
+        typeof req.body.icon === "string" ? req.body.icon.trim() : undefined;
       const iconPath =
         getUploadedFilePath(req, "icon", "categories") ||
         getUploadedFilePath(req, "attachmentFiles", "categories") ||
-        req.body.icon;
+        (rawBodyIcon || undefined);
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...req.body,
-        ...(iconPath ? { icon: iconPath } : {}),
       };
+      if (iconPath) {
+        payload.icon = iconPath;
+      } else {
+        delete payload.icon;
+      }
 
       const dto = await validateContentDto(UpdateCategoryDto, payload);
       const category = await categoryService.update(id, dto);

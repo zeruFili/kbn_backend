@@ -16,8 +16,12 @@ export interface CategoryFilterOptions {
   sort_order?: "ASC" | "DESC";
 }
 
+export type CategoryWithCount = Category & {
+  company_count: number;
+};
+
 export interface PaginatedCategoriesResult {
-  data: Category[];
+  data: CategoryWithCount[];
   meta: {
     total: number;
     page: number;
@@ -60,7 +64,28 @@ export class CategoryService {
     qb.orderBy(`category.${safeSortBy}`, sortOrder === "DESC" ? "DESC" : "ASC");
 
     const total = await qb.getCount();
-    const data = await qb.skip((page - 1) * limit).take(limit).getMany();
+    const categories = await qb.skip((page - 1) * limit).take(limit).getMany();
+
+    const countMap = new Map<string, number>();
+    if (categories.length > 0) {
+      const categoryIds = categories.map((c) => c.id);
+      const rawCounts = await companyRepo()
+        .createQueryBuilder("company")
+        .select("company.business_category_id", "categoryId")
+        .addSelect("COUNT(*)", "count")
+        .where("company.business_category_id IN (:...categoryIds)", { categoryIds })
+        .groupBy("company.business_category_id")
+        .getRawMany<{ categoryId: string; count: string }>();
+
+      for (const row of rawCounts) {
+        countMap.set(row.categoryId, parseInt(row.count, 10) || 0);
+      }
+    }
+
+    const data: CategoryWithCount[] = categories.map((cat) => ({
+      ...cat,
+      company_count: countMap.get(cat.id) ?? 0,
+    }));
 
     return {
       data,
@@ -73,7 +98,7 @@ export class CategoryService {
     };
   }
 
-  async findById(id: string): Promise<Category> {
+  private async findEntityById(id: string): Promise<Category> {
     const category = await repo().findOne({ where: { id } });
     if (!category) {
       throw new AppError(404, "Category not found");
@@ -81,7 +106,15 @@ export class CategoryService {
     return category;
   }
 
-  async create(dto: CreateCategoryDto): Promise<Category> {
+  async findById(id: string): Promise<CategoryWithCount> {
+    const category = await this.findEntityById(id);
+    const company_count = await companyRepo().count({
+      where: { business_category_id: id },
+    });
+    return { ...category, company_count };
+  }
+
+  async create(dto: CreateCategoryDto): Promise<CategoryWithCount> {
     const type = dto.type || CategoryType.COMPANY;
     const trimmedName = dto.name.trim();
 
@@ -106,11 +139,12 @@ export class CategoryService {
       type,
     });
 
-    return repo().save(category);
+    const saved = await repo().save(category);
+    return { ...saved, company_count: 0 };
   }
 
-  async update(id: string, dto: UpdateCategoryDto): Promise<Category> {
-    const category = await this.findById(id);
+  async update(id: string, dto: UpdateCategoryDto): Promise<CategoryWithCount> {
+    const category = await this.findEntityById(id);
 
     const newName = dto.name !== undefined ? dto.name.trim() : category.name;
     const newType = dto.type !== undefined ? dto.type : category.type;
@@ -152,17 +186,25 @@ export class CategoryService {
       deleteFile(prevIcon);
     }
 
-    return saved;
+    const company_count = await companyRepo().count({
+      where: { business_category_id: id },
+    });
+
+    return { ...saved, company_count };
   }
 
-  async updateStatus(id: string, isActive: boolean): Promise<Category> {
-    const category = await this.findById(id);
+  async updateStatus(id: string, isActive: boolean): Promise<CategoryWithCount> {
+    const category = await this.findEntityById(id);
     category.is_active = isActive;
-    return repo().save(category);
+    const saved = await repo().save(category);
+    const company_count = await companyRepo().count({
+      where: { business_category_id: id },
+    });
+    return { ...saved, company_count };
   }
 
   async remove(id: string): Promise<void> {
-    const category = await this.findById(id);
+    const category = await this.findEntityById(id);
 
     const associatedCompaniesCount = await companyRepo().count({
       where: { business_category_id: id },

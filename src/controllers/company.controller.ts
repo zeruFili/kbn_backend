@@ -4,6 +4,7 @@ import { AppError } from "../middlewares/error.middleware";
 import { VerificationStatus } from "../enums/verification-status.enum";
 import { CompanyStatus } from "../enums/company-status.enum";
 import { SocialPlatform } from "../enums/social-platform.enum";
+import { UserRole } from "../enums/user-role.enum";
 import { companyService } from "../services/company.service";
 import {
   CreateCompanyDto,
@@ -184,6 +185,25 @@ export class CompanyController {
     try {
       const id = contentResourceId(req);
       const company = await companyService.findById(id);
+
+      const authReq = req as AuthRequest;
+      const isAdmin = authReq.user?.role === UserRole.Admin;
+      const isOwner =
+        Boolean(authReq.user?.id && company.created_by === authReq.user.id) ||
+        Boolean(
+          authReq.user?.email &&
+            company.email &&
+            company.email.toLowerCase() === authReq.user.email.toLowerCase()
+        );
+      const isHiddenStatus =
+        !company.is_active ||
+        company.status === CompanyStatus.INACTIVE ||
+        company.status === CompanyStatus.SUSPENDED;
+
+      if (isHiddenStatus && !isAdmin && !isOwner) {
+        throw new AppError(404, "Company not found");
+      }
+
       res.status(200).json({ success: true, data: company });
     } catch (error) {
       next(error);

@@ -229,6 +229,72 @@ async function runCompanyFilterTests() {
     assert.strictEqual(searchMatch, true);
     console.log("  ✓ Passed: Search query filters across company.services");
 
+    // -------------------------------------------------------------
+    // 9. findById hides deactivated companies from non-admin non-owners
+    // -------------------------------------------------------------
+    console.log("Test 9: findById enforces visibility for deactivated companies");
+    const originalFindById = companyService.findById.bind(companyService);
+    const deactivatedCompany = {
+      id: "00000000-0000-4000-8000-000000000001",
+      company_name: "Hidden Biz",
+      email: "owner@hidden.biz",
+      is_active: false,
+      status: CompanyStatus.INACTIVE,
+      created_by: "owner-1",
+    } as unknown as Company;
+    (companyService as any).findById = async () => deactivatedCompany;
+
+    try {
+      // Non-admin non-owner receives 404
+      let capturedErr: any = null;
+      await companyController.findById(
+        {
+          params: { id: deactivatedCompany.id },
+          user: { id: "other-user", role: UserRole.User, email: "other@example.com", status: UserStatus.ACTIVE },
+        } as any,
+        mockRes,
+        (err: any) => {
+          capturedErr = err;
+        }
+      );
+      assert.strictEqual(capturedErr?.statusCode, 404);
+
+      // Admin receives 200
+      capturedErr = null;
+      responseStatus = 0;
+      await companyController.findById(
+        {
+          params: { id: deactivatedCompany.id },
+          user: { id: "admin-1", role: UserRole.Admin, email: "admin@example.com", status: UserStatus.ACTIVE },
+        } as any,
+        mockRes,
+        (err: any) => {
+          capturedErr = err;
+        }
+      );
+      assert.strictEqual(capturedErr, null);
+      assert.strictEqual(responseStatus, 200);
+
+      // Owner receives 200
+      capturedErr = null;
+      responseStatus = 0;
+      await companyController.findById(
+        {
+          params: { id: deactivatedCompany.id },
+          user: { id: "owner-1", role: UserRole.Company, email: "owner@hidden.biz", status: UserStatus.ACTIVE },
+        } as any,
+        mockRes,
+        (err: any) => {
+          capturedErr = err;
+        }
+      );
+      assert.strictEqual(capturedErr, null);
+      assert.strictEqual(responseStatus, 200);
+      console.log("  ✓ Passed: Deactivated company hidden from non-admins/non-owners, visible to admin and owner");
+    } finally {
+      (companyService as any).findById = originalFindById;
+    }
+
     console.log("\nALL COMPANY FILTER TESTS PASSED SUCCESSFULLY! ✓");
   } finally {
     AppDataSource.getRepository = originalGetRepository;

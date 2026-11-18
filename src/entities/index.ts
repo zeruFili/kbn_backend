@@ -2,7 +2,6 @@ export { User } from "./User";
 export { LocalCredential } from "./LocalCredential";
 export { AuthIdentity } from "./AuthIdentity";
 export { PasswordResetToken } from "./PasswordResetToken";
-export { Blog } from "./blog";
 export { Article } from "./aricle";
 export { Event } from "./event";
 export { Payment } from "./payment";

@@ -12,7 +12,6 @@ import { errorHandler, notFound } from "./middlewares/error.middleware";
 
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
-import blogRoutes from "./routes/blog.routes";
 import articleRoutes from "./routes/article.routes";
 import eventRoutes from "./routes/event.routes";
 import paymentRoutes from "./routes/payment.routes";
@@ -60,7 +59,6 @@ app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
-app.use("/api/v1/blogs", blogRoutes);
 app.use("/api/v1/articles", articleRoutes);
 app.use("/api/v1/events", eventRoutes);
 app.use("/api/v1/payments", paymentRoutes);

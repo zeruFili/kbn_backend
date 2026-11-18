@@ -25,6 +25,10 @@ export class UpdatePaymentDto {
   status?: PaymentStatus;
 
   @IsOptional() @IsString() amount?: string;
+  @IsOptional() @IsString() membershipCategory?: string | null;
+  @IsOptional() @IsString() membership_category?: string | null;
+  @IsOptional() @IsString() expectedAmount?: string | null;
+  @IsOptional() @IsString() expected_amount?: string | null;
   @IsOptional() @Type(() => Date) @IsDate() expirationDate?: Date | null;
   @IsOptional() @Type(() => Date) @IsDate() expiration_date?: Date | null;
 }
@@ -33,6 +37,8 @@ export class PaymentQueryDto {
   @IsOptional() @IsUUID() userId?: string;
   @IsOptional() @IsString() userName?: string;
   @IsOptional() status?: PaymentStatus | string;
+  @IsOptional() @IsString() membershipCategory?: string;
+  @IsOptional() @IsString() membership_category?: string;
   @IsOptional() @IsString() date?: string;
   @IsOptional() @IsString() dateFrom?: string;
   @IsOptional() @IsString() dateTo?: string;

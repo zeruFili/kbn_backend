@@ -7,6 +7,7 @@ import { contentResourceId, validateContentDto } from "../utils/content-controll
 import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.utils";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
+import { MEMBERSHIP_CATEGORIES, resolveMembershipCategory } from "../constants/membership-categories";
 
 export class PaymentController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -60,6 +61,11 @@ export class PaymentController {
       const userName: string | undefined = typeof rawUserName === "string" ? rawUserName : Array.isArray(rawUserName) ? String(rawUserName[0]) : undefined;
 
       const status = (req.query.status ?? req.query.payment_status) as PaymentStatus | PaymentStatus[] | string | string[] | undefined;
+      const membershipCategory = (
+        req.query.membership_category ??
+        req.query.membershipCategory ??
+        req.query.category
+      ) as string | undefined;
 
       const expired = (req.query.expired ?? req.query.is_expired) as boolean | string | undefined;
       const expirationFrom = (
@@ -85,6 +91,7 @@ export class PaymentController {
         userId,
         userName,
         status,
+        membershipCategory,
         expired,
         expirationFrom,
         expirationTo,
@@ -112,6 +119,17 @@ export class PaymentController {
     }
   }
 
+  async listMembershipCategories(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json({
+        success: true,
+        data: MEMBERSHIP_CATEGORIES,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async verifyReceipt(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       if (!req.user) {
@@ -123,7 +141,39 @@ export class PaymentController {
         throw new AppError(400, "Payment receipt image is required");
       }
 
-      const result = await paymentService.verifyReceipt(req.user.id, uploadedFiles[0]);
+      const membershipCategoryRaw = (
+        req.body.membershipCategory ??
+        req.body.membership_category ??
+        req.body.category
+      ) as string | undefined;
+
+      const requestedAmountRaw = (
+        req.body.amount ??
+        req.body.paymentAmount ??
+        req.body.expectedAmount
+      ) as string | number | undefined;
+
+      // Membership category selection is required before proceeding with payment
+      if (!membershipCategoryRaw || !membershipCategoryRaw.trim()) {
+        cleanupUploadedFiles(req);
+        throw new AppError(400, "Please select a membership package before proceeding with payment verification");
+      }
+
+      const categoryDefinition = resolveMembershipCategory(membershipCategoryRaw);
+      if (!categoryDefinition) {
+        cleanupUploadedFiles(req);
+        throw new AppError(
+          400,
+          `Invalid membership category '${membershipCategoryRaw}'. Valid options are: ${MEMBERSHIP_CATEGORIES.map((c) => c.name).join(", ")}`
+        );
+      }
+
+      // For now, do not verify payment amount based on membership category.
+      // Focus on capturing selected category and storing it along with user's ID and category amount.
+      const result = await paymentService.verifyReceipt(req.user.id, uploadedFiles[0], {
+        membershipCategory: categoryDefinition.id,
+        expectedAmount: categoryDefinition.amount,
+      });
 
       if (result.verified && result.duplicate) {
         res.status(409).json({

@@ -144,6 +144,8 @@ export interface VerifyBankResponseOptions {
   expectedReceiverName?: string;
   expectedReceiverAccount?: string;
   customPaymentDate?: Date;
+  membershipCategoryLabel?: string;
+  verifyCategoryAmount?: boolean;
 }
 
 // ============================================================================
@@ -376,11 +378,18 @@ export class BankResponseService {
       expectedReceiverAccount
     );
 
-    // 3. Validate payment amount against user role
+    // 3. Validate payment amount against user role or selected membership category
+    // For now, do not verify the payment amount based on the membership category selected by the user,
+    // unless verifyCategoryAmount is explicitly enabled (e.g. for future phase testing).
+    const isCategory = Boolean(options.membershipCategoryLabel);
+    const skipCategoryAmountCheck = isCategory && options.verifyCategoryAmount !== true;
+
     const amountValidation = this.validateAmountForRole(
       parsed.amount,
       expectedAmount,
-      userRole
+      userRole,
+      options.membershipCategoryLabel,
+      skipCategoryAmountCheck
     );
 
     // 4. Determine overall status and calculate expiration date
@@ -398,7 +407,10 @@ export class BankResponseService {
       // Underpaid payments are put into PENDING status according to business rules
       status = PaymentStatus.PENDING;
       reason = amountValidation.reason;
-      message = `Payment amount is lower than expected for role ${userRole || "unknown"}. Payment marked as pending.`;
+      const targetLabel = options.membershipCategoryLabel
+        ? `membership package '${options.membershipCategoryLabel}'`
+        : `role ${userRole || "unknown"}`;
+      message = `Payment amount is lower than expected for ${targetLabel}. Payment marked as pending.`;
     } else if (!amountValidation.isValid) {
       status = PaymentStatus.REJECTED;
       reason = amountValidation.reason;
@@ -454,10 +466,16 @@ export class BankResponseService {
       return this.parseAwashReceipt(awashData, url);
     }
 
+    const firstBodyItem =
+      Array.isArray(payload.body) && payload.body.length > 0 && typeof payload.body[0] === "object"
+        ? (payload.body[0] as Record<string, unknown>)
+        : null;
+
     // Case 2: Bank of Abyssinia JSON Receipt (source: "boa-json")
     if (
       upstreamReceipt?.source === "boa-json" ||
       payload.source === "boa-json" ||
+      firstBodyItem?.source === "boa-json" ||
       url?.includes("bankofabyssinia.com") ||
       (typeof payload.provider === "string" && (payload.provider.toLowerCase().includes("abyssinia") || payload.provider.toLowerCase().includes("boa"))) ||
       (typeof detected?.provider === "string" && (detected.provider.toLowerCase().includes("abyssinia") || detected.provider.toLowerCase().includes("boa")))
@@ -868,17 +886,18 @@ export class BankResponseService {
       }
     }
 
-    // Check character-by-character where both have unmasked characters
-    const minLen = Math.min(cleanActual.length, cleanExpected.length);
-    for (let i = 0; i < minLen; i++) {
-      const charAct = cleanActual[i];
-      const charExp = cleanExpected[i];
-      const isWildAct = charAct === "*" || charAct.toUpperCase() === "X" || charAct === "-";
-      const isWildExp = charExp === "*" || charExp.toUpperCase() === "X" || charExp === "-";
+    // Check character-by-character where both have unmasked characters (when lengths match)
+    if (cleanActual.length === cleanExpected.length) {
+      for (let i = 0; i < cleanActual.length; i++) {
+        const charAct = cleanActual[i];
+        const charExp = cleanExpected[i];
+        const isWildAct = charAct === "*" || charAct.toUpperCase() === "X" || charAct === "-";
+        const isWildExp = charExp === "*" || charExp.toUpperCase() === "X" || charExp === "-";
 
-      if (!isWildAct && !isWildExp) {
-        if (charAct !== charExp) {
-          return false;
+        if (!isWildAct && !isWildExp) {
+          if (charAct !== charExp) {
+            return false;
+          }
         }
       }
     }
@@ -905,12 +924,15 @@ export class BankResponseService {
   }
 
   /**
-   * Validates actual payment amount against the expected role amount.
+   * Validates actual payment amount against the expected role amount or membership category.
+   * If skipCategoryAmountCheck is true, skips underpayment checks based on the membership category.
    */
   validateAmountForRole(
     actualAmount: number,
     expectedAmount: number,
-    role?: UserRole
+    role?: UserRole,
+    categoryLabel?: string,
+    skipCategoryAmountCheck: boolean = false
   ): AmountValidationResult {
     if (actualAmount <= 0) {
       return {
@@ -924,10 +946,10 @@ export class BankResponseService {
       };
     }
 
-    if (expectedAmount <= 0) {
-      // If no expected amount is configured (e.g. role has free access or 0), payment covers at least 1 month
+    if (skipCategoryAmountCheck || expectedAmount <= 0) {
+      // For now, do not verify the payment amount based on the membership category selected by the user.
       return {
-        expectedAmount: 0,
+        expectedAmount,
         actualAmount,
         isValid: true,
         isUnderpaid: false,
@@ -937,6 +959,9 @@ export class BankResponseService {
     }
 
     if (actualAmount < expectedAmount) {
+      const targetDesc = categoryLabel
+        ? `membership '${categoryLabel}'`
+        : `role '${role || "user"}'`;
       return {
         expectedAmount,
         actualAmount,
@@ -944,7 +969,7 @@ export class BankResponseService {
         isUnderpaid: true,
         isOverpaid: false,
         coveredMonths: 0,
-        reason: `Payment of ${actualAmount.toFixed(2)} ETB is lower than expected monthly amount (${expectedAmount.toFixed(2)} ETB) for role '${role || "user"}'.`,
+        reason: `Payment of ${actualAmount.toFixed(2)} ETB is lower than expected monthly amount (${expectedAmount.toFixed(2)} ETB) for ${targetDesc}.`,
       };
     }
 

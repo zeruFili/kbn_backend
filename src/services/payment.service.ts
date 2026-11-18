@@ -13,6 +13,16 @@ import { AppError } from "../middlewares/error.middleware";
 import { deleteFile } from "../utils/upload.utils";
 import { UpdatePaymentDto } from "../validators/payment.dto";
 import { bankResponseService, BankVerificationResult } from "./bank-response.service";
+import {
+  resolveMembershipCategory,
+  getMembershipCategoryAmount,
+  getMembershipCategoryLabel,
+} from "../constants/membership-categories";
+
+export interface VerifyReceiptOptions {
+  membershipCategory?: string | null;
+  expectedAmount?: number | null;
+}
 
 type VerificationPayload = Record<string, unknown>;
 
@@ -63,6 +73,8 @@ export interface PaymentListOptions {
   userId?: string;
   userName?: string;
   status?: PaymentStatus | PaymentStatus[] | string | string[];
+  membershipCategory?: string;
+  membership_category?: string;
   expired?: boolean | string;
   expirationFrom?: string;
   expirationTo?: string;
@@ -266,14 +278,36 @@ export class PaymentService {
     baseDateOverride?: Date | null
   ): Promise<Date> {
     let coveredMonths = 1;
-    const user = await userRepo().findOne({ where: { id: payment.user_id } });
-    if (user) {
-      const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
-      const expectedAmount = rolePayment ? Number(rolePayment.monthlyAmount) : 0;
-      const actualAmount = Number(payment.amount) || 0;
-      if (expectedAmount > 0 && actualAmount >= expectedAmount) {
-        coveredMonths = Math.max(1, Math.floor(actualAmount / expectedAmount));
+    let expectedAmount = 0;
+
+    // 1. Check if payment has expectedAmount or membershipCategory
+    if (payment.expectedAmount && Number(payment.expectedAmount) > 0) {
+      expectedAmount = Number(payment.expectedAmount);
+    } else if (payment.membershipCategory) {
+      const catAmount = getMembershipCategoryAmount(payment.membershipCategory);
+      if (catAmount) expectedAmount = catAmount;
+    }
+
+    // 2. Fallback to user membershipCategory or role payment monthly amount
+    if (expectedAmount <= 0) {
+      const user = await userRepo().findOne({ where: { id: payment.user_id } });
+      if (user) {
+        if (user.membershipCategory) {
+          const userCatAmount = getMembershipCategoryAmount(user.membershipCategory);
+          if (userCatAmount) expectedAmount = userCatAmount;
+        }
+        if (expectedAmount <= 0) {
+          const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
+          if (rolePayment) {
+            expectedAmount = Number(rolePayment.monthlyAmount);
+          }
+        }
       }
+    }
+
+    const actualAmount = Number(payment.amount) || 0;
+    if (expectedAmount > 0 && actualAmount >= expectedAmount) {
+      coveredMonths = Math.max(1, Math.floor(actualAmount / expectedAmount));
     }
 
     const baseDate = baseDateOverride || (payment.date ? new Date(payment.date) : new Date());
@@ -403,6 +437,18 @@ export class PaymentService {
     const previousImage = payment.image;
     Object.assign(payment, dto);
 
+    if (dto.membershipCategory !== undefined) {
+      payment.membershipCategory = dto.membershipCategory;
+    } else if (dto.membership_category !== undefined) {
+      payment.membershipCategory = dto.membership_category;
+    }
+
+    if (dto.expectedAmount !== undefined) {
+      payment.expectedAmount = dto.expectedAmount;
+    } else if (dto.expected_amount !== undefined) {
+      payment.expectedAmount = dto.expected_amount;
+    }
+
     const hasExplicitExp = dto.expirationDate !== undefined || dto.expiration_date !== undefined;
     if (dto.expirationDate !== undefined) {
       payment.expirationDate = dto.expirationDate;
@@ -424,7 +470,7 @@ export class PaymentService {
     }
 
     if (saved.status === PaymentStatus.ACCEPTED) {
-      await this.activateUserOnSuccessfulPayment(saved.user_id);
+      await this.activateUserOnSuccessfulPayment(saved.user_id, saved.membershipCategory);
     }
 
     return saved;
@@ -536,6 +582,16 @@ export class PaymentService {
       }
     }
 
+    if (options.membershipCategory?.trim()) {
+      query.andWhere("payment.membership_category = :membershipCategory", {
+        membershipCategory: options.membershipCategory.trim(),
+      });
+    } else if (options.membership_category?.trim()) {
+      query.andWhere("payment.membership_category = :membershipCategory", {
+        membershipCategory: options.membership_category.trim(),
+      });
+    }
+
     if (exactDate) {
       query.andWhere("DATE(payment.created_at) = DATE(:exactDate)", { exactDate });
     }
@@ -598,7 +654,11 @@ export class PaymentService {
     };
   }
 
-  async verifyReceipt(userId: string, imagePath: string): Promise<VerifyPaymentResult> {
+  async verifyReceipt(
+    userId: string,
+    imagePath: string,
+    options?: VerifyReceiptOptions
+  ): Promise<VerifyPaymentResult> {
     const base64Image = this.readImageAsBase64(imagePath);
 
     let payload: VerificationPayload | null = null;
@@ -618,13 +678,29 @@ export class PaymentService {
       reason = error instanceof Error ? error.message : "Receipt verification request failed";
     }
 
+    // Resolve chosen membership category if provided
+    const chosenCategory = options?.membershipCategory
+      ? resolveMembershipCategory(options.membershipCategory)
+      : null;
+    const categoryKey = chosenCategory ? chosenCategory.id : (options?.membershipCategory || null);
+    const categoryAmount = chosenCategory ? chosenCategory.amount : (options?.expectedAmount ?? null);
+    const categoryLabel = chosenCategory ? chosenCategory.name : undefined;
+
     // Fetch user to determine role and expected payment amount
     const user = await userRepo().findOne({ where: { id: userId } });
-    let expectedAmount = 0;
-    if (user) {
-      const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
-      if (rolePayment) {
-        expectedAmount = Number(rolePayment.monthlyAmount);
+    let expectedAmount = categoryAmount ? Number(categoryAmount) : 0;
+    if (expectedAmount <= 0 && user) {
+      if (user.membershipCategory) {
+        const userCat = resolveMembershipCategory(user.membershipCategory);
+        if (userCat) {
+          expectedAmount = userCat.amount;
+        }
+      }
+      if (expectedAmount <= 0) {
+        const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
+        if (rolePayment) {
+          expectedAmount = Number(rolePayment.monthlyAmount);
+        }
       }
     }
 
@@ -637,14 +713,28 @@ export class PaymentService {
     );
 
     // Call dedicated bank response verification service
+    // For now, do not verify payment amount based on membership category (verifyCategoryAmount: false)
     let bankResult: BankVerificationResult | null = null;
     if (payload && (verified || payload.source === "awash-html" || upstream?.attempted === true)) {
       bankResult = bankResponseService.verifyBankResponse({
         payload,
         userRole: user?.role,
         expectedAmount,
+        membershipCategoryLabel: categoryLabel,
+        verifyCategoryAmount: false,
       });
     }
+
+    // Determine category price to record as payment amount
+    const targetCategoryAmount = categoryAmount
+      ? Number(categoryAmount)
+      : (expectedAmount > 0 ? expectedAmount : 0);
+    const storedPaymentAmount = targetCategoryAmount > 0
+      ? targetCategoryAmount.toFixed(2)
+      : (bankResult ? bankResult.formattedAmount : "0.00");
+    const storedExpectedAmount = targetCategoryAmount > 0
+      ? targetCategoryAmount.toFixed(2)
+      : null;
 
     if (bankResult) {
       // Check duplicate URL
@@ -684,12 +774,14 @@ export class PaymentService {
         status: bankResult.status,
         date: bankResult.transactionTime,
         time: bankResult.time,
-        amount: bankResult.formattedAmount,
+        amount: storedPaymentAmount,
+        membershipCategory: categoryKey,
+        expectedAmount: storedExpectedAmount,
         expirationDate: bankResult.expirationDate,
       }));
 
       if (bankResult.status === PaymentStatus.ACCEPTED) {
-        await this.activateUserOnSuccessfulPayment(userId);
+        await this.activateUserOnSuccessfulPayment(userId, categoryKey);
         return {
           verified: true,
           duplicate: false,
@@ -723,7 +815,9 @@ export class PaymentService {
       status: PaymentStatus.PENDING,
       date: new Date(),
       time: currentTime(),
-      amount: "0.00",
+      amount: storedPaymentAmount,
+      membershipCategory: categoryKey,
+      expectedAmount: storedExpectedAmount,
       expirationDate: null,
     }));
 
@@ -979,13 +1073,23 @@ export class PaymentService {
     });
   }
 
-  private async activateUserOnSuccessfulPayment(userId: string): Promise<void> {
+  private async activateUserOnSuccessfulPayment(
+    userId: string,
+    membershipCategory?: string | null
+  ): Promise<void> {
     const user = await userRepo().findOne({ where: { id: userId } });
     if (!user) return;
+
+    if (membershipCategory) {
+      user.membershipCategory = membershipCategory;
+    }
 
     if (user.status !== UserStatus.SUSPENDED) {
       user.status = UserStatus.ACTIVE;
       user.is_active = true;
+      user.updated_at = new Date();
+      await userRepo().save(user);
+    } else if (membershipCategory) {
       user.updated_at = new Date();
       await userRepo().save(user);
     }

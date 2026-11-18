@@ -78,6 +78,11 @@ export class User {
   @Column({ type: "enum", enum: UserRole })
   role: UserRole;
 
+  @Column({ name: "membership_category", type: "varchar", length: 100, nullable: true })
+  membershipCategory?: string | null;
+
+  membership_category?: string | null;
+
   @Column({ type: "timestamptz", nullable: true })
   last_login_at?: Date | null;
 
@@ -118,6 +123,17 @@ export class User {
       enumerable: true,
       configurable: true,
     });
+
+    Object.defineProperty(this, "membership_category", {
+      get(this: User) {
+        return this.membershipCategory;
+      },
+      set(this: User, val: string | null | undefined) {
+        this.membershipCategory = val;
+      },
+      enumerable: true,
+      configurable: true,
+    });
   }
 
   @BeforeInsert()
@@ -134,6 +150,12 @@ export class User {
       this.phoneNumber = this.phone;
     } else if (this.phoneNumber !== undefined && this.phone === undefined) {
       this.phone = this.phoneNumber;
+    }
+
+    if (this.membership_category !== undefined && this.membershipCategory === undefined) {
+      this.membershipCategory = this.membership_category;
+    } else if (this.membershipCategory !== undefined && this.membership_category === undefined) {
+      this.membership_category = this.membershipCategory;
     }
   }
 }

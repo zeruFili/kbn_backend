@@ -4,6 +4,7 @@ import {
 } from "typeorm";
 import { User } from "./User";
 import { PaymentStatus } from "../enums/payment-status.enum";
+import { getMembershipCategoryLabel } from "../constants/membership-categories";
 
 @Entity("payment")
 export class Payment {
@@ -67,6 +68,31 @@ export class Payment {
   @Column({ name: "expiration_date", type: "timestamptz", nullable: true })
   expirationDate: Date | null;
 
+  // Membership package / category (e.g. "beginner_professionals_business_owners")
+  @Index()
+  @Column({ name: "membership_category", type: "varchar", length: 100, nullable: true })
+  membershipCategory: string | null;
+
+  get membership_category(): string | null {
+    return this.membershipCategory;
+  }
+
+  set membership_category(value: string | null) {
+    this.membershipCategory = value;
+  }
+
+  // Expected package amount (e.g. 250.00, 500.00, 750.00, 1000.00)
+  @Column({ name: "expected_amount", type: "numeric", precision: 12, scale: 2, nullable: true })
+  expectedAmount: string | null;
+
+  get expected_amount(): string | null {
+    return this.expectedAmount;
+  }
+
+  set expected_amount(value: string | null) {
+    this.expectedAmount = value;
+  }
+
   get expiration_date(): Date | null {
     return this.expirationDate;
   }
@@ -116,6 +142,12 @@ export class Payment {
       reference: this.reference,
       url: this.url,
       image: this.image,
+      membershipCategory: this.membershipCategory,
+      membership_category: this.membershipCategory,
+      membershipCategoryLabel: getMembershipCategoryLabel(this.membershipCategory),
+      membership_category_label: getMembershipCategoryLabel(this.membershipCategory),
+      expectedAmount: this.expectedAmount,
+      expected_amount: this.expectedAmount,
       expirationDate: this.expirationDate,
       expiration_date: this.expirationDate,
       isExpired: this.isExpired,

@@ -7,6 +7,13 @@ import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { bankResponseService } from "../services/bank-response.service";
 import { paymentService } from "../services/payment.service";
+import { MembershipCategory } from "../enums/membership-category.enum";
+import {
+  MEMBERSHIP_CATEGORIES,
+  resolveMembershipCategory,
+  getMembershipCategoryAmount,
+  getMembershipCategoryLabel,
+} from "../constants/membership-categories";
 
 async function runBankResponseTests() {
   console.log("Starting Bank Response & Payment Verification tests...\n");
@@ -189,8 +196,7 @@ async function runBankResponseTests() {
   // ==========================================================================
   // Test 6: Overpayment extends expiration date to End of Month
   // ==========================================================================
-  console.log("Test 6: Overpayment extends expiration date further to End of Month");
-  const baseDate = new Date(2026, 9, 15); // October 15, 2026 (0-indexed 9)
+  const baseDate = new Date(Date.UTC(2026, 9, 15)); // October 15, 2026 UTC
 
   // 1 Month payment: 500 ETB -> expires after 1 month (November 15, 2026)
   const singleMonthExp = bankResponseService.calculateSubscriptionExpiration(baseDate, 1);
@@ -418,7 +424,127 @@ async function runBankResponseTests() {
   assert.ok(zemenResult.expirationDate instanceof Date);
   console.log("  ✓ Passed: Zemen Bank PDF receipt parsed and verified");
 
-  console.log("\nAll 10 bank response verification tests passed successfully!");
+  // ==========================================================================
+  // Test 11: Membership Categories Resolution & Verification
+  // ==========================================================================
+  console.log("Test 11: Membership Categories Resolution & Verification");
+  assert.strictEqual(MEMBERSHIP_CATEGORIES.length, 4, "Must have exactly 4 membership categories");
+
+  // 1. Verify canonical package amounts and names
+  const beginner = resolveMembershipCategory(MembershipCategory.BEGINNER_PROFESSIONALS_BUSINESS_OWNERS);
+  assert.ok(beginner);
+  assert.strictEqual(beginner.amount, 250);
+  assert.strictEqual(beginner.name, "Beginner Professionals & Business Owners");
+  assert.strictEqual(getMembershipCategoryAmount(MembershipCategory.BEGINNER_PROFESSIONALS_BUSINESS_OWNERS), 250);
+
+  const developing = resolveMembershipCategory(MembershipCategory.DEVELOPING_PROFESSIONALS_BUSINESS_OWNERS);
+  assert.ok(developing);
+  assert.strictEqual(developing.amount, 500);
+  assert.strictEqual(developing.name, "Developing Professionals & Business Owners");
+
+  const established = resolveMembershipCategory(MembershipCategory.ESTABLISHED_PROFESSIONALS_BUSINESS_OWNERS);
+  assert.ok(established);
+  assert.strictEqual(established.amount, 750);
+  assert.strictEqual(established.name, "Established Professionals & Business Owners");
+
+  const investors = resolveMembershipCategory(MembershipCategory.INVESTORS_STRATEGIC_PARTNERS);
+  assert.ok(investors);
+  assert.strictEqual(investors.amount, 1000);
+  assert.strictEqual(investors.name, "Investors & Strategic Partners");
+
+  // 2. Exact payment for Beginner tier (250 ETB)
+  const beginnerPayload = {
+    source: "awash-html",
+    customer: { customerName: "Aster Aweke" },
+    transaction: {
+      transactionTime: "2026-10-15 10:00:00 AM",
+      amount: "250 ETB",
+      beneficiaryName: "KINGDOM BUILDERS MINISTRY",
+      beneficiaryAccount: "0012521619011",
+      transactionId: "AW-BEGINNER-01",
+    },
+  };
+  const beginnerResult = bankResponseService.verifyBankResponse({
+    payload: beginnerPayload,
+    expectedAmount: 250,
+    membershipCategoryLabel: beginner.name,
+  });
+  assert.strictEqual(beginnerResult.success, true);
+  assert.strictEqual(beginnerResult.status, PaymentStatus.ACCEPTED);
+  assert.strictEqual(beginnerResult.extractedAmount, 250);
+
+  // 3. Phase 1: Do not verify payment amount based on membership category selected by user
+  const phase1CategoryResult = bankResponseService.verifyBankResponse({
+    payload: beginnerPayload, // paid 250 on receipt
+    expectedAmount: 1000, // selected 1000 Investors tier
+    membershipCategoryLabel: investors.name,
+    verifyCategoryAmount: false,
+  });
+  assert.strictEqual(phase1CategoryResult.success, true, "Phase 1 must accept receipt without verifying category price");
+  assert.strictEqual(phase1CategoryResult.status, PaymentStatus.ACCEPTED);
+
+  // When verifyCategoryAmount: true is explicitly requested (future phase):
+  const underpaidCategoryResult = bankResponseService.verifyBankResponse({
+    payload: beginnerPayload, // only paid 250
+    expectedAmount: 500,
+    membershipCategoryLabel: developing.name,
+    verifyCategoryAmount: true,
+  });
+  assert.strictEqual(underpaidCategoryResult.success, false);
+  assert.strictEqual(underpaidCategoryResult.status, PaymentStatus.PENDING);
+  assert.ok(underpaidCategoryResult.reason?.includes("Developing Professionals & Business Owners"));
+
+  // 4. Overpayment for Established tier (paid 1500 ETB for 750 tier -> 2 months)
+  const establishedOverpaidPayload = {
+    source: "awash-html",
+    customer: { customerName: "Dawit Tsige" },
+    transaction: {
+      transactionTime: "2026-10-15 10:00:00 AM",
+      amount: "1500 ETB",
+      beneficiaryName: "KINGDOM BUILDERS MINISTRY",
+      beneficiaryAccount: "0012521619011",
+      transactionId: "AW-ESTABLISHED-01",
+    },
+  };
+  const establishedOverpaidResult = bankResponseService.verifyBankResponse({
+    payload: establishedOverpaidPayload,
+    expectedAmount: 750,
+    membershipCategoryLabel: established.name,
+    verifyCategoryAmount: true,
+  });
+  assert.strictEqual(establishedOverpaidResult.success, true);
+  assert.strictEqual(establishedOverpaidResult.status, PaymentStatus.ACCEPTED);
+  assert.strictEqual(establishedOverpaidResult.amountValidation.coveredMonths, 2);
+
+  // 5. Expiration calculation with payment.expectedAmount
+  const mockPayment = new Payment();
+  mockPayment.user_id = "test-user-id";
+  mockPayment.amount = "750.00";
+  mockPayment.expectedAmount = "750.00";
+  mockPayment.membershipCategory = MembershipCategory.ESTABLISHED_PROFESSIONALS_BUSINESS_OWNERS;
+  mockPayment.date = new Date(Date.UTC(2026, 9, 15));
+  const expDate = await paymentService.calculateExpirationDateForPayment(mockPayment);
+  assert.strictEqual(expDate.getUTCMonth(), 10, "1 month coverage expires in November");
+  assert.strictEqual(expDate.getUTCDate(), 15);
+
+  // 6. Verify Payment Record captures User ID, Membership Category, and Category Price
+  const paymentRecord = new Payment();
+  paymentRecord.user_id = "user-uuid-123";
+  paymentRecord.membershipCategory = MembershipCategory.DEVELOPING_PROFESSIONALS_BUSINESS_OWNERS;
+  paymentRecord.amount = developing.amount.toFixed(2); // "500.00"
+  paymentRecord.expectedAmount = developing.amount.toFixed(2);
+  paymentRecord.status = PaymentStatus.ACCEPTED;
+  paymentRecord.date = new Date(Date.UTC(2026, 9, 15));
+
+  const json = paymentRecord.toJSON();
+  assert.strictEqual(json.user_id, "user-uuid-123");
+  assert.strictEqual(json.membershipCategory, "developing_professionals_business_owners");
+  assert.strictEqual(json.amount, "500.00");
+  assert.strictEqual(json.membershipCategoryLabel, "Developing Professionals & Business Owners");
+
+  console.log("  ✓ Passed: Membership category definitions, amounts, validation, and expirations verified");
+
+  console.log("\nAll 11 bank response & membership verification tests passed successfully!");
 }
 
 runBankResponseTests().catch((err) => {

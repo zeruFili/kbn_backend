@@ -48,6 +48,11 @@ router.get(
 );
 
 router.get(
+  "/membership-categories",
+  (req, res, next) => paymentController.listMembershipCategories(req, res, next)
+);
+
+router.get(
   "/:id",
   authenticate,
   authorize(

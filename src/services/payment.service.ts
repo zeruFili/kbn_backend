@@ -6,6 +6,7 @@ import { AppDataSource } from "../config/data-source";
 import { Payment } from "../entities/payment";
 import { User } from "../entities/User";
 import { RolePayment } from "../entities/role-payment";
+import { MembershipCategory } from "../entities/membership-category.entity";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
@@ -21,6 +22,7 @@ import {
 
 export interface VerifyReceiptOptions {
   membershipCategory?: string | null;
+  membershipCategoryId?: string | null;
   expectedAmount?: number | null;
 }
 
@@ -347,12 +349,14 @@ export class PaymentService {
 
     const latestAcceptedPayment = await repo().findOne({
       where: { user_id: userId, status: PaymentStatus.ACCEPTED },
+      relations: ["membershipCategoryEntity"],
       order: { created_at: "DESC" },
     });
 
     if (!latestAcceptedPayment) {
       const latestAnyPayment = await repo().findOne({
         where: { user_id: userId },
+        relations: ["membershipCategoryEntity"],
         order: { created_at: "DESC" },
       });
 
@@ -397,7 +401,7 @@ export class PaymentService {
   ): Promise<Payment> {
     const payment = await repo().findOne({
       where: { id },
-      relations: ["user"],
+      relations: ["user", "membershipCategoryEntity"],
     });
     if (!payment) throw new AppError(404, "Payment not found");
 
@@ -437,10 +441,16 @@ export class PaymentService {
     const previousImage = payment.image;
     Object.assign(payment, dto);
 
-    if (dto.membershipCategory !== undefined) {
-      payment.membershipCategory = dto.membershipCategory;
-    } else if (dto.membership_category !== undefined) {
-      payment.membershipCategory = dto.membership_category;
+    if (dto.membershipCategory !== undefined || dto.membership_category !== undefined) {
+      const catCode = dto.membershipCategory || dto.membership_category;
+      payment.membershipCategory = catCode || null;
+      if (catCode) {
+        const cat = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { code: catCode } });
+        if (cat) {
+          payment.membership_category_id = cat.id;
+          payment.membershipCategoryEntity = cat;
+        }
+      }
     }
 
     if (dto.expectedAmount !== undefined) {
@@ -470,7 +480,7 @@ export class PaymentService {
     }
 
     if (saved.status === PaymentStatus.ACCEPTED) {
-      await this.activateUserOnSuccessfulPayment(saved.user_id, saved.membershipCategory);
+      await this.activateUserOnSuccessfulPayment(saved.user_id, saved.membershipCategory, saved.membership_category_id);
     }
 
     return saved;
@@ -554,7 +564,8 @@ export class PaymentService {
     }
 
     const query = repo().createQueryBuilder("payment")
-      .leftJoinAndSelect("payment.user", "user");
+      .leftJoinAndSelect("payment.user", "user")
+      .leftJoinAndSelect("payment.membershipCategoryEntity", "membershipCategoryEntity");
 
     if (role !== UserRole.Admin) {
       if (options.userId && options.userId.trim() !== userId) {
@@ -678,16 +689,52 @@ export class PaymentService {
       reason = error instanceof Error ? error.message : "Receipt verification request failed";
     }
 
-    // Resolve chosen membership category if provided
-    const chosenCategory = options?.membershipCategory
-      ? resolveMembershipCategory(options.membershipCategory)
-      : null;
-    const categoryKey = chosenCategory ? chosenCategory.id : (options?.membershipCategory || null);
-    const categoryAmount = chosenCategory ? chosenCategory.amount : (options?.expectedAmount ?? null);
-    const categoryLabel = chosenCategory ? chosenCategory.name : undefined;
-
     // Fetch user to determine role and expected payment amount
-    const user = await userRepo().findOne({ where: { id: userId } });
+    const user = await userRepo().findOne({
+      where: { id: userId },
+      relations: ["membershipCategoryEntity"],
+    });
+
+    // Resolve category entity from database
+    let categoryEntity: MembershipCategory | null = null;
+    const catInput =
+      options?.membershipCategoryId ||
+      options?.membershipCategory ||
+      user?.membership_category_id ||
+      user?.membershipCategory;
+
+    if (catInput && typeof catInput === "string" && catInput.trim()) {
+      const catTrimmed = catInput.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(catTrimmed);
+      if (isUuid) {
+        categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { id: catTrimmed } });
+      }
+      if (!categoryEntity) {
+        categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { code: catTrimmed.toLowerCase() } });
+      }
+      if (!categoryEntity) {
+        const allCats = await AppDataSource.getRepository(MembershipCategory).find();
+        const cleanInput = catTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+        categoryEntity =
+          allCats.find(
+            (c) =>
+              c.code.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput ||
+              c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput
+          ) || null;
+      }
+    }
+
+    const categoryKey = categoryEntity
+      ? categoryEntity.code
+      : (options?.membershipCategory || user?.membershipCategory || null);
+    const categoryId = categoryEntity ? categoryEntity.id : null;
+    const categoryAmount = categoryEntity
+      ? Number(categoryEntity.amount)
+      : (options?.expectedAmount ?? null);
+    const categoryLabel = categoryEntity
+      ? categoryEntity.name
+      : (getMembershipCategoryLabel(categoryKey) || undefined);
+
     let expectedAmount = categoryAmount ? Number(categoryAmount) : 0;
     if (expectedAmount <= 0 && user) {
       if (user.membershipCategory) {
@@ -767,6 +814,8 @@ export class PaymentService {
 
       const payment = await repo().save(repo().create({
         user_id: userId,
+        membership_category_id: categoryId,
+        membershipCategoryEntity: categoryEntity || null,
         image: imagePath,
         url: bankResult.url,
         provider: bankResult.provider,
@@ -781,7 +830,7 @@ export class PaymentService {
       }));
 
       if (bankResult.status === PaymentStatus.ACCEPTED) {
-        await this.activateUserOnSuccessfulPayment(userId, categoryKey);
+        await this.activateUserOnSuccessfulPayment(userId, categoryKey, categoryId);
         return {
           verified: true,
           duplicate: false,
@@ -808,6 +857,8 @@ export class PaymentService {
 
     const payment = await repo().save(repo().create({
       user_id: userId,
+      membership_category_id: categoryId,
+      membershipCategoryEntity: categoryEntity || null,
       image: imagePath,
       url: null,
       provider: null,
@@ -1075,24 +1126,32 @@ export class PaymentService {
 
   private async activateUserOnSuccessfulPayment(
     userId: string,
-    membershipCategory?: string | null
+    membershipCategory?: string | null,
+    membershipCategoryId?: string | null
   ): Promise<void> {
     const user = await userRepo().findOne({ where: { id: userId } });
     if (!user) return;
 
+    if (membershipCategoryId) {
+      user.membership_category_id = membershipCategoryId;
+    }
     if (membershipCategory) {
       user.membershipCategory = membershipCategory;
+      user.membership_category = membershipCategory;
+    }
+    if (!user.membership_category_id && membershipCategory) {
+      const cat = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { code: membershipCategory } });
+      if (cat) {
+        user.membership_category_id = cat.id;
+      }
     }
 
     if (user.status !== UserStatus.SUSPENDED) {
       user.status = UserStatus.ACTIVE;
       user.is_active = true;
-      user.updated_at = new Date();
-      await userRepo().save(user);
-    } else if (membershipCategory) {
-      user.updated_at = new Date();
-      await userRepo().save(user);
     }
+    user.updated_at = new Date();
+    await userRepo().save(user);
   }
 }
 

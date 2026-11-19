@@ -8,6 +8,8 @@ import { cleanupUploadedFiles, getFilePathsFromRequest } from "../utils/upload.u
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { UserRole } from "../enums/user-role.enum";
 import { MEMBERSHIP_CATEGORIES, resolveMembershipCategory } from "../constants/membership-categories";
+import { AppDataSource } from "../config/data-source";
+import { MembershipCategory } from "../entities/membership-category.entity";
 
 export class PaymentController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -121,6 +123,31 @@ export class PaymentController {
 
   async listMembershipCategories(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      const catRepo = AppDataSource.getRepository(MembershipCategory);
+      const dbCategories = await catRepo.find({
+        where: { is_active: true },
+        order: { tier: "ASC" },
+      });
+
+      if (dbCategories && dbCategories.length > 0) {
+        res.status(200).json({
+          success: true,
+          data: dbCategories.map((c) => ({
+            id: c.code,
+            code: c.code,
+            categoryId: c.id,
+            name: c.name,
+            amount: Number(c.amount),
+            currency: c.currency,
+            formattedPrice: c.formattedPrice || `${c.currency} ${Number(c.amount).toLocaleString()}`,
+            tier: c.tier,
+            description: c.description || "",
+            popular: c.popular,
+          })),
+        });
+        return;
+      }
+
       res.status(200).json({
         success: true,
         data: MEMBERSHIP_CATEGORIES,
@@ -159,8 +186,29 @@ export class PaymentController {
         throw new AppError(400, "Please select a membership package before proceeding with payment verification");
       }
 
+      // Try finding category in database first
+      const catRepo = AppDataSource.getRepository(MembershipCategory);
+      let dbCategory: MembershipCategory | null = null;
+      const trimmed = membershipCategoryRaw.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+
+      if (isUuid) {
+        dbCategory = await catRepo.findOne({ where: { id: trimmed } });
+      }
+      if (!dbCategory) {
+        dbCategory = await catRepo.findOne({ where: { code: trimmed.toLowerCase() } });
+      }
+      if (!dbCategory) {
+        const allDbCats = await catRepo.find();
+        const cleanNorm = trimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+        dbCategory = allDbCats.find((c) =>
+          c.code.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanNorm ||
+          c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanNorm
+        ) || null;
+      }
+
       const categoryDefinition = resolveMembershipCategory(membershipCategoryRaw);
-      if (!categoryDefinition) {
+      if (!dbCategory && !categoryDefinition) {
         cleanupUploadedFiles(req);
         throw new AppError(
           400,
@@ -168,11 +216,16 @@ export class PaymentController {
         );
       }
 
+      const categoryCode = dbCategory ? dbCategory.code : categoryDefinition!.id;
+      const categoryId = dbCategory ? dbCategory.id : null;
+      const categoryAmount = dbCategory ? Number(dbCategory.amount) : categoryDefinition!.amount;
+
       // For now, do not verify payment amount based on membership category.
       // Focus on capturing selected category and storing it along with user's ID and category amount.
       const result = await paymentService.verifyReceipt(req.user.id, uploadedFiles[0], {
-        membershipCategory: categoryDefinition.id,
-        expectedAmount: categoryDefinition.amount,
+        membershipCategory: categoryCode,
+        membershipCategoryId: categoryId,
+        expectedAmount: categoryAmount,
       });
 
       if (result.verified && result.duplicate) {

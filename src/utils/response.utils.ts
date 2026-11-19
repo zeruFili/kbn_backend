@@ -1,5 +1,6 @@
 import { User } from "../entities/User";
 import { UserStatus } from "../enums/user-status.enum";
+import { getMembershipCategoryLabel } from "../constants/membership-categories";
 
 export interface SafeUserOutput {
   id: string;
@@ -17,6 +18,13 @@ export interface SafeUserOutput {
   phoneVerifiedAt?: Date | null;
   emailVerifiedAt?: Date | null;
   hasPassword?: boolean;
+  membershipCategory?: string | null;
+  membership_category?: string | null;
+  membershipCategoryId?: string | null;
+  membership_category_id?: string | null;
+  membershipCategoryLabel?: string | null;
+  membership_category_label?: string | null;
+  membershipCategoryEntity?: any;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -39,6 +47,13 @@ export interface AdminUserOutput {
   phoneVerifiedAt?: Date | null;
   emailVerifiedAt?: Date | null;
   hasPassword?: boolean;
+  membershipCategory?: string | null;
+  membership_category?: string | null;
+  membershipCategoryId?: string | null;
+  membership_category_id?: string | null;
+  membershipCategoryLabel?: string | null;
+  membership_category_label?: string | null;
+  membershipCategoryEntity?: any;
   website: string | null;
   education: string | null;
   achievement: string | null;
@@ -59,6 +74,12 @@ export interface AdminUserOutput {
 export function pickSafeUserFields(user: User | null | undefined): SafeUserOutput | null {
   if (!user) return null;
   const image = user.profileImage ?? null;
+  const categoryCode = user.membershipCategory || user.membership_category || null;
+  const categoryId = user.membership_category_id || user.membershipCategoryId || null;
+  const categoryLabel =
+    user.membershipCategoryEntity?.name ||
+    getMembershipCategoryLabel(categoryCode);
+
   return {
     id: user.id,
     name: user.name || user.full_name,
@@ -75,6 +96,13 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
     phoneVerifiedAt: user.phoneVerifiedAt ?? null,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
     hasPassword: Boolean(user.localCredential?.passwordHash || user.password_hash),
+    membershipCategory: categoryCode,
+    membership_category: categoryCode,
+    membershipCategoryId: categoryId,
+    membership_category_id: categoryId,
+    membershipCategoryLabel: categoryLabel,
+    membership_category_label: categoryLabel,
+    membershipCategoryEntity: user.membershipCategoryEntity ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,
@@ -89,6 +117,12 @@ export function pickSafeUserFields(user: User | null | undefined): SafeUserOutpu
 export function pickAdminUserFields(user: User | null | undefined): AdminUserOutput | null {
   if (!user) return null;
   const image = user.profileImage ?? null;
+  const categoryCode = user.membershipCategory || user.membership_category || null;
+  const categoryId = user.membership_category_id || user.membershipCategoryId || null;
+  const categoryLabel =
+    user.membershipCategoryEntity?.name ||
+    getMembershipCategoryLabel(categoryCode);
+
   return {
     id: user.id,
     name: user.name || user.full_name,
@@ -101,6 +135,13 @@ export function pickAdminUserFields(user: User | null | undefined): AdminUserOut
     phoneVerifiedAt: user.phoneVerifiedAt ?? null,
     emailVerifiedAt: user.emailVerifiedAt ?? null,
     hasPassword: Boolean(user.localCredential?.passwordHash || user.password_hash),
+    membershipCategory: categoryCode,
+    membership_category: categoryCode,
+    membershipCategoryId: categoryId,
+    membership_category_id: categoryId,
+    membershipCategoryLabel: categoryLabel,
+    membership_category_label: categoryLabel,
+    membershipCategoryEntity: user.membershipCategoryEntity ?? null,
     website: user.website ?? null,
     education: user.education ?? null,
     achievement: user.achievement ?? null,

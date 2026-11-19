@@ -3,6 +3,7 @@ import { User } from "../entities/User";
 import { LocalCredential } from "../entities/LocalCredential";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
+import { getMembershipCategoryLabel } from "../constants/membership-categories";
 
 export interface UserDetails {
   id: string;
@@ -13,6 +14,13 @@ export interface UserDetails {
   status: UserStatus;
   is_active?: boolean;
   hasPassword?: boolean;
+  membershipCategory?: string | null;
+  membership_category?: string | null;
+  membershipCategoryId?: string | null;
+  membership_category_id?: string | null;
+  membershipCategoryLabel?: string | null;
+  membership_category_label?: string | null;
+  membershipCategoryEntity?: any;
   profileImage: string | null;
   profile_image?: string | null;
   avatar?: string | null;
@@ -32,7 +40,10 @@ export interface UserDetails {
 const userRepo = () => AppDataSource.getRepository(User);
 
 export async function getUserDetails(userId: string): Promise<UserDetails | null> {
-  const user = await userRepo().findOne({ where: { id: userId } });
+  const user = await userRepo().findOne({
+    where: { id: userId },
+    relations: ["membershipCategoryEntity"],
+  });
   if (!user) return null;
   const image = user.profileImage ?? null;
 
@@ -46,6 +57,12 @@ export async function getUserDetails(userId: string): Promise<UserDetails | null
     // Non-fatal
   }
 
+  const categoryCode = user.membershipCategory || user.membership_category || null;
+  const categoryId = user.membership_category_id || user.membershipCategoryId || null;
+  const categoryLabel =
+    user.membershipCategoryEntity?.name ||
+    getMembershipCategoryLabel(categoryCode);
+
   return {
     id: user.id,
     fullName: user.full_name,
@@ -55,6 +72,13 @@ export async function getUserDetails(userId: string): Promise<UserDetails | null
     status: user.status,
     is_active: user.is_active,
     hasPassword,
+    membershipCategory: categoryCode,
+    membership_category: categoryCode,
+    membershipCategoryId: categoryId,
+    membership_category_id: categoryId,
+    membershipCategoryLabel: categoryLabel,
+    membership_category_label: categoryLabel,
+    membershipCategoryEntity: user.membershipCategoryEntity ?? null,
     profileImage: image,
     profile_image: image,
     avatar: image,

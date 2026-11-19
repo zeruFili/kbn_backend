@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 import { DataSource } from "typeorm";
 import { AppDataSource } from "./config/data-source";
 import { errorHandler, notFound } from "./middlewares/error.middleware";
+import { seedMembershipCategories } from "./seeds/seed-membership-categories";
 
 import authRoutes from "./routes/auth.routes";
 import userRoutes from "./routes/user.routes";
@@ -109,7 +110,12 @@ async function cleanupOldMarketingTables() {
 
 cleanupOldMarketingTables()
   .then(() => AppDataSource.initialize())
-  .then(() => {
+  .then(async () => {
+    try {
+      await seedMembershipCategories(AppDataSource);
+    } catch (seedErr: any) {
+      console.warn("[App] Membership categories seed notice:", seedErr?.message);
+    }
     app.listen(PORT, () => {
       // Server started
     });

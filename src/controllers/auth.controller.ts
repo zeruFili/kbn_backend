@@ -106,6 +106,15 @@ export class AuthController {
         return;
       }
 
+      const membershipCategoryInput =
+        dto.membershipCategory ||
+        dto.membership_category ||
+        (typeof req.body.category === "string" ? req.body.category : undefined);
+      const membershipCategoryIdInput =
+        dto.membershipCategoryId ||
+        dto.membership_category_id ||
+        (typeof req.body.categoryId === "string" ? req.body.categoryId : undefined);
+
       const result = await authService.register({
         full_name: dto.full_name,
         email: dto.email,
@@ -116,6 +125,10 @@ export class AuthController {
         profileImage: dto.profileImage,
         otp: dto.otp,
         otpMethod,
+        membershipCategory: membershipCategoryInput,
+        membership_category: membershipCategoryInput,
+        membershipCategoryId: membershipCategoryIdInput,
+        membership_category_id: membershipCategoryIdInput,
       });
 
       res.status(201).json({
@@ -128,6 +141,12 @@ export class AuthController {
           email: result.user.email,
           role: result.user.role,
           status: result.user.status,
+          membershipCategory: result.user.membershipCategory,
+          membership_category: result.user.membershipCategory,
+          membershipCategoryId: result.user.membershipCategoryId || result.user.membership_category_id,
+          membership_category_id: result.user.membership_category_id || result.user.membershipCategoryId,
+          membershipCategoryLabel: result.user.membershipCategoryLabel,
+          membership_category_label: result.user.membershipCategoryLabel,
           profileImage: result.user.profileImage,
           accessToken: result.accessToken,
         },

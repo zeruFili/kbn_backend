@@ -8,6 +8,7 @@ import { LocalCredential } from "../entities/LocalCredential";
 import { AuthIdentity } from "../entities/AuthIdentity";
 import { PasswordResetToken } from "../entities/PasswordResetToken";
 import { OtpVerification } from "../entities/otp-verification";
+import { MembershipCategory } from "../entities/membership-category.entity";
 import { UserRole } from "../enums/user-role.enum";
 import { UserStatus } from "../enums/user-status.enum";
 import { AppError } from "../middlewares/error.middleware";
@@ -473,6 +474,10 @@ export class AuthService {
     profileImage?: string | null;
     otp?: string;
     otpMethod?: "sms" | "email";
+    membershipCategory?: string | null;
+    membership_category?: string | null;
+    membershipCategoryId?: string | null;
+    membership_category_id?: string | null;
   }): Promise<{
     accessToken: string;
     user: SafeUserOutput;
@@ -516,6 +521,38 @@ export class AuthService {
       const isSmsOtp = otpMethod === "sms" && !!otpRecordId;
       const isEmailOtp = otpMethod === "email" && !!otpRecordId;
 
+      let categoryEntity: MembershipCategory | null = null;
+      const rawCat =
+        data.membershipCategoryId ||
+        data.membership_category_id ||
+        data.membershipCategory ||
+        data.membership_category;
+      if (rawCat && typeof rawCat === "string" && rawCat.trim()) {
+        const catTrimmed = rawCat.trim();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(catTrimmed);
+        if (isUuid) {
+          categoryEntity = await transactionalManager
+            .getRepository(MembershipCategory)
+            .findOne({ where: { id: catTrimmed } });
+        }
+        if (!categoryEntity) {
+          const normalized = catTrimmed.toLowerCase();
+          categoryEntity = await transactionalManager
+            .getRepository(MembershipCategory)
+            .findOne({ where: { code: normalized } });
+        }
+        if (!categoryEntity) {
+          const allCats = await transactionalManager.getRepository(MembershipCategory).find();
+          const cleanInput = catTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+          categoryEntity =
+            allCats.find(
+              (c) =>
+                c.code.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput ||
+                c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput
+            ) || null;
+        }
+      }
+
       const user = transactionalManager.getRepository(User).create({
         full_name: data.full_name,
         email: data.email.trim().toLowerCase(),
@@ -528,9 +565,15 @@ export class AuthService {
         is_active: false,
         phoneVerifiedAt: isSmsOtp ? new Date() : null,
         emailVerifiedAt: isEmailOtp ? new Date() : null,
+        membership_category_id: categoryEntity ? categoryEntity.id : null,
+        membershipCategory: categoryEntity
+          ? categoryEntity.code
+          : data.membershipCategory || data.membership_category || null,
+        membershipCategoryEntity: categoryEntity || null,
       });
 
       const saved = await transactionalManager.getRepository(User).save(user);
+      saved.membershipCategoryEntity = categoryEntity || null;
 
       // Persist password hash in LocalCredential model
       const localCred = transactionalManager.getRepository(LocalCredential).create({

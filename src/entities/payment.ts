@@ -3,6 +3,7 @@ import {
   Index, UpdateDateColumn, ManyToOne, JoinColumn,
 } from "typeorm";
 import { User } from "./User";
+import { MembershipCategory } from "./membership-category.entity";
 import { PaymentStatus } from "../enums/payment-status.enum";
 import { getMembershipCategoryLabel } from "../constants/membership-categories";
 
@@ -20,6 +21,14 @@ export class Payment {
   @ManyToOne(() => User, { onDelete: "RESTRICT" })
   @JoinColumn({ name: "user_id" })
   user: User;
+
+  @Index()
+  @Column({ name: "membership_category_id", type: "uuid", nullable: true })
+  membership_category_id: string | null;
+
+  @ManyToOne(() => MembershipCategory, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "membership_category_id" })
+  membershipCategoryEntity?: MembershipCategory | null;
 
   // ---------- Payment details ----------
 
@@ -144,8 +153,13 @@ export class Payment {
       image: this.image,
       membershipCategory: this.membershipCategory,
       membership_category: this.membershipCategory,
-      membershipCategoryLabel: getMembershipCategoryLabel(this.membershipCategory),
-      membership_category_label: getMembershipCategoryLabel(this.membershipCategory),
+      membership_category_id: this.membership_category_id,
+      membershipCategoryId: this.membership_category_id,
+      membershipCategoryEntity: this.membershipCategoryEntity,
+      membershipCategoryLabel:
+        this.membershipCategoryEntity?.name || getMembershipCategoryLabel(this.membershipCategory),
+      membership_category_label:
+        this.membershipCategoryEntity?.name || getMembershipCategoryLabel(this.membershipCategory),
       expectedAmount: this.expectedAmount,
       expected_amount: this.expectedAmount,
       expirationDate: this.expirationDate,

@@ -84,6 +84,22 @@ export class RegisterDto {
     message: "OTP method must be either 'sms' or 'email'",
   })
   otpMethod?: "sms" | "email";
+
+  @IsOptional()
+  @IsString()
+  membershipCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  membership_category?: string;
+
+  @IsOptional()
+  @IsString()
+  membershipCategoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  membership_category_id?: string;
 }
 
 export class GoogleAuthDto {

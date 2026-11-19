@@ -7,6 +7,8 @@ import {
   UpdateDateColumn,
   OneToMany,
   OneToOne,
+  ManyToOne,
+  JoinColumn,
   BeforeInsert,
   BeforeUpdate,
   AfterLoad,
@@ -16,6 +18,7 @@ import { UserStatus } from "../enums/user-status.enum";
 import { EventRegistration } from "./event-registration";
 import { LocalCredential } from "./LocalCredential";
 import { AuthIdentity } from "./AuthIdentity";
+import { MembershipCategory } from "./membership-category.entity";
 
 @Entity("user")
 export class User {
@@ -83,6 +86,16 @@ export class User {
 
   membership_category?: string | null;
 
+  @Index("IDX_user_membership_category_id")
+  @Column({ name: "membership_category_id", type: "uuid", nullable: true })
+  membership_category_id?: string | null;
+
+  membershipCategoryId?: string | null;
+
+  @ManyToOne(() => MembershipCategory, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "membership_category_id" })
+  membershipCategoryEntity?: MembershipCategory | null;
+
   @Column({ type: "timestamptz", nullable: true })
   last_login_at?: Date | null;
 
@@ -134,6 +147,17 @@ export class User {
       enumerable: true,
       configurable: true,
     });
+
+    Object.defineProperty(this, "membershipCategoryId", {
+      get(this: User) {
+        return this.membership_category_id;
+      },
+      set(this: User, val: string | null | undefined) {
+        this.membership_category_id = val;
+      },
+      enumerable: true,
+      configurable: true,
+    });
   }
 
   @BeforeInsert()
@@ -156,6 +180,12 @@ export class User {
       this.membershipCategory = this.membership_category;
     } else if (this.membershipCategory !== undefined && this.membership_category === undefined) {
       this.membership_category = this.membershipCategory;
+    }
+
+    if (this.membership_category_id !== undefined && this.membershipCategoryId === undefined) {
+      this.membershipCategoryId = this.membership_category_id;
+    } else if (this.membershipCategoryId !== undefined && this.membership_category_id === undefined) {
+      this.membership_category_id = this.membershipCategoryId;
     }
   }
 }

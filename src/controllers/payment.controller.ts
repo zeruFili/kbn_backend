@@ -10,6 +10,7 @@ import { UserRole } from "../enums/user-role.enum";
 import { MEMBERSHIP_CATEGORIES, resolveMembershipCategory } from "../constants/membership-categories";
 import { AppDataSource } from "../config/data-source";
 import { MembershipCategory } from "../entities/membership-category.entity";
+import { pickSafeUserFields } from "../utils/response.utils";
 
 export class PaymentController {
   async list(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -151,6 +152,40 @@ export class PaymentController {
       res.status(200).json({
         success: true,
         data: MEMBERSHIP_CATEGORIES,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async selectMembershipCategory(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.user) {
+        throw new AppError(401, "Unauthorized");
+      }
+
+      const rawCategory =
+        req.body?.membershipCategory ||
+        req.body?.membership_category ||
+        req.body?.membershipCategoryId ||
+        req.body?.membership_category_id ||
+        req.body?.category ||
+        req.body?.code ||
+        req.body?.id;
+
+      if (!rawCategory || typeof rawCategory !== "string") {
+        throw new AppError(400, "Membership category is required");
+      }
+
+      const result = await paymentService.selectMembershipCategory(req.user.id, rawCategory);
+
+      res.status(200).json({
+        success: true,
+        message: "Membership category selected successfully",
+        data: {
+          user: pickSafeUserFields(result.user),
+          membershipCategory: result.membershipCategory,
+        },
       });
     } catch (error) {
       next(error);

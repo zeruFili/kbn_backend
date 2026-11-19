@@ -101,6 +101,26 @@ async function runTests() {
   assert.strictEqual(paymentJson.membership_category_label, "Developing Professionals & Business Owners");
   console.log("  ✓ Passed: Payment entity toJSON properly outputs category ID, code, and label\n");
 
+  // Test 5: Verify resolveMembershipCategory resolves all 4 tiers by key or name
+  console.log("Test 5: Verify resolveMembershipCategory matches tiers accurately");
+  const { resolveMembershipCategory } = await import("../constants/membership-categories");
+  const resolvedT1 = resolveMembershipCategory("beginner_professionals_business_owners");
+  assert.strictEqual(resolvedT1?.tier, 1);
+  assert.strictEqual(resolvedT1?.amount, 250);
+
+  const resolvedT2 = resolveMembershipCategory("Developing Professionals & Business Owners");
+  assert.strictEqual(resolvedT2?.tier, 2);
+  assert.strictEqual(resolvedT2?.amount, 500);
+
+  const resolvedT3 = resolveMembershipCategory("established_professionals_business_owners");
+  assert.strictEqual(resolvedT3?.tier, 3);
+  assert.strictEqual(resolvedT3?.amount, 750);
+
+  const resolvedT4 = resolveMembershipCategory("Investors & Strategic Partners");
+  assert.strictEqual(resolvedT4?.tier, 4);
+  assert.strictEqual(resolvedT4?.amount, 1000);
+  console.log("  ✓ Passed: All 4 tiers resolve accurately by code or formatted name\n");
+
   console.log("All Membership Category & Registration tests passed successfully!");
 }
 

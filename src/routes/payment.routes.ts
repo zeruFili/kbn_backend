@@ -52,6 +52,13 @@ router.get(
   (req, res, next) => paymentController.listMembershipCategories(req, res, next)
 );
 
+router.post(
+  "/select-category",
+  authenticate,
+  requirePaymentOrActive,
+  (req, res, next) => paymentController.selectMembershipCategory(req, res, next)
+);
+
 router.get(
   "/:id",
   authenticate,

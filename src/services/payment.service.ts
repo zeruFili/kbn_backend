@@ -1153,6 +1153,96 @@ export class PaymentService {
     user.updated_at = new Date();
     await userRepo().save(user);
   }
+
+  async selectMembershipCategory(
+    userId: string,
+    categoryInput: string
+  ): Promise<{
+    user: User;
+    membershipCategory: any;
+  }> {
+    if (!categoryInput || typeof categoryInput !== "string" || !categoryInput.trim()) {
+      throw new AppError(400, "Membership category is required");
+    }
+
+    const catTrimmed = categoryInput.trim();
+    let categoryEntity: MembershipCategory | null = null;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(catTrimmed);
+
+    if (isUuid) {
+      categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { id: catTrimmed } });
+    }
+    if (!categoryEntity) {
+      categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({
+        where: { code: catTrimmed.toLowerCase() },
+      });
+    }
+    if (!categoryEntity) {
+      const allCats = await AppDataSource.getRepository(MembershipCategory).find();
+      const cleanInput = catTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+      categoryEntity =
+        allCats.find(
+          (c) =>
+            c.code.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput ||
+            c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput
+        ) || null;
+    }
+
+    const resolved = resolveMembershipCategory(catTrimmed);
+    const categoryCode = categoryEntity ? categoryEntity.code : (resolved ? resolved.id : catTrimmed);
+    const categoryId = categoryEntity ? categoryEntity.id : null;
+
+    const user = await userRepo().findOne({
+      where: { id: userId },
+      relations: ["membershipCategoryEntity"],
+    });
+
+    if (!user) {
+      throw new AppError(404, "User not found");
+    }
+
+    user.membership_category_id = categoryId;
+    user.membershipCategory = categoryCode;
+    user.membership_category = categoryCode;
+    user.membershipCategoryEntity = categoryEntity || null;
+    user.updated_at = new Date();
+
+    const savedUser = await userRepo().save(user);
+    savedUser.membershipCategoryEntity = categoryEntity || null;
+
+    return {
+      user: savedUser,
+      membershipCategory: categoryEntity
+        ? {
+            id: categoryEntity.code,
+            code: categoryEntity.code,
+            categoryId: categoryEntity.id,
+            name: categoryEntity.name,
+            amount: Number(categoryEntity.amount),
+            currency: categoryEntity.currency,
+            formattedPrice:
+              categoryEntity.formattedPrice ||
+              `${categoryEntity.currency} ${Number(categoryEntity.amount).toLocaleString()}`,
+            tier: categoryEntity.tier,
+            description: categoryEntity.description || "",
+            popular: categoryEntity.popular,
+          }
+        : resolved
+        ? {
+            id: resolved.id,
+            code: resolved.id,
+            categoryId: null,
+            name: resolved.name,
+            amount: resolved.amount,
+            currency: resolved.currency,
+            formattedPrice: resolved.formattedPrice,
+            tier: resolved.tier,
+            description: resolved.description,
+            popular: resolved.popular,
+          }
+        : null,
+    };
+  }
 }
 
 export const paymentService = new PaymentService();

@@ -670,6 +670,109 @@ export class PaymentService {
     imagePath: string,
     options?: VerifyReceiptOptions
   ): Promise<VerifyPaymentResult> {
+    // Flag to bypass external RECEIPT_VERIFY_API_BASE verification.
+    // Set to false or configure RECEIPT_VERIFY_BYPASS=false to re-enable upstream API verification.
+    const bypassVerification = process.env.RECEIPT_VERIFY_BYPASS !== "false";
+
+    if (bypassVerification) {
+      // 1. Simulate submission process for approximately 7 seconds
+      await new Promise((resolve) => setTimeout(resolve, 7000));
+
+      // 2. Fetch user to determine role and expected payment amount
+      const user = await userRepo().findOne({
+        where: { id: userId },
+        relations: ["membershipCategoryEntity"],
+      });
+
+      // Resolve category entity from database
+      let categoryEntity: MembershipCategory | null = null;
+      const catInput =
+        options?.membershipCategoryId ||
+        options?.membershipCategory ||
+        user?.membership_category_id ||
+        user?.membershipCategory;
+
+      if (catInput && typeof catInput === "string" && catInput.trim()) {
+        const catTrimmed = catInput.trim();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(catTrimmed);
+        if (isUuid) {
+          categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { id: catTrimmed } });
+        }
+        if (!categoryEntity) {
+          categoryEntity = await AppDataSource.getRepository(MembershipCategory).findOne({ where: { code: catTrimmed.toLowerCase() } });
+        }
+        if (!categoryEntity) {
+          const allCats = await AppDataSource.getRepository(MembershipCategory).find();
+          const cleanInput = catTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "");
+          categoryEntity =
+            allCats.find(
+              (c) =>
+                c.code.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput ||
+                c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanInput
+            ) || null;
+        }
+      }
+
+      const categoryKey = categoryEntity
+        ? categoryEntity.code
+        : (options?.membershipCategory || user?.membershipCategory || null);
+      const categoryId = categoryEntity ? categoryEntity.id : null;
+      const categoryAmount = categoryEntity
+        ? Number(categoryEntity.amount)
+        : (options?.expectedAmount ?? null);
+
+      let expectedAmount = categoryAmount ? Number(categoryAmount) : 0;
+      if (expectedAmount <= 0 && user) {
+        if (user.membershipCategory) {
+          const userCat = resolveMembershipCategory(user.membershipCategory);
+          if (userCat) {
+            expectedAmount = userCat.amount;
+          }
+        }
+        if (expectedAmount <= 0) {
+          const rolePayment = await rolePaymentRepo().findOne({ where: { role: user.role } });
+          if (rolePayment) {
+            expectedAmount = Number(rolePayment.monthlyAmount);
+          }
+        }
+      }
+
+      const targetCategoryAmount = categoryAmount
+        ? Number(categoryAmount)
+        : (expectedAmount > 0 ? expectedAmount : 0);
+      const storedPaymentAmount = targetCategoryAmount > 0
+        ? targetCategoryAmount.toFixed(2)
+        : "0.00";
+      const storedExpectedAmount = targetCategoryAmount > 0
+        ? targetCategoryAmount.toFixed(2)
+        : null;
+
+      // 3. Store uploaded image & create payment record with Pending status
+      const payment = await repo().save(repo().create({
+        user_id: userId,
+        membership_category_id: categoryId,
+        membershipCategoryEntity: categoryEntity || null,
+        image: imagePath,
+        url: null,
+        provider: null,
+        reference: null,
+        status: PaymentStatus.PENDING,
+        date: new Date(),
+        time: currentTime(),
+        amount: storedPaymentAmount,
+        membershipCategory: categoryKey,
+        expectedAmount: storedExpectedAmount,
+        expirationDate: null,
+      }));
+
+      return {
+        verified: false,
+        payment,
+        message: "Payment receipt submitted successfully. It will be reviewed by our team shortly.",
+        reason: "Receipt submitted for admin review",
+      };
+    }
+
     const base64Image = this.readImageAsBase64(imagePath);
 
     let payload: VerificationPayload | null = null;

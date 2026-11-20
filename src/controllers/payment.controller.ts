@@ -283,6 +283,16 @@ export class PaymentController {
         return;
       }
 
+      if (result.payment && result.payment.status === PaymentStatus.PENDING) {
+        res.status(201).json({
+          success: true,
+          duplicate: false,
+          message: result.message || "Payment receipt submitted successfully and is currently under review.",
+          data: result.payment,
+        });
+        return;
+      }
+
       res.status(200).json({
         success: false,
         duplicate: false,

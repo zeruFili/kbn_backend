@@ -15,3 +15,5 @@ export { EventRegistration } from "./event-registration";
 export { OtpVerification } from "./otp-verification";
 export { MembershipCategory } from "./membership-category.entity";
 export { LoveGift } from "./love-gift";
+export { FeaturedMember } from "./featured-member";
+export { FeaturedCompany } from "./featured-company";

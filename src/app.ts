@@ -21,6 +21,7 @@ import categoryRoutes from "./routes/category.routes";
 import rolePaymentRoutes from "./routes/role-payment.routes";
 import eventRegistrationRoutes from "./routes/event-registration.routes";
 import loveGiftRoutes from "./routes/love-gift.routes";
+import featuredRoutes from "./routes/featured.routes";
 
 import fileRoutes from "./routes/file.routes";
 
@@ -69,6 +70,7 @@ app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/role-payments", rolePaymentRoutes);
 app.use("/api/v1/event-registrations", eventRegistrationRoutes);
 app.use("/api/v1/love-gifts", loveGiftRoutes);
+app.use("/api/v1/featured", featuredRoutes);
 
 app.use("/api/v1/files", fileRoutes);
 

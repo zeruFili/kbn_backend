@@ -23,7 +23,8 @@
     "test:user-profile-image": "ts-node src/tests/user-profile-image.test.ts",
     "test:otp": "ts-node src/tests/otp-verification.test.ts",
     "test:google-auth": "ts-node src/tests/google-auth.test.ts",
-    "test:membership-category": "ts-node src/tests/membership-category-registration.test.ts"
+    "test:membership-category": "ts-node src/tests/membership-category-registration.test.ts",
+    "test:featured": "ts-node src/tests/featured.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -135,7 +135,30 @@ async function runBankResponseTests() {
     false,
     "Unverified / all-wildcard match must not be treated as successful"
   );
-  console.log("  ✓ Passed: Masked account matching verified rigorously");
+
+  // Birhan Bank Account Verification
+  assert.strictEqual(
+    bankResponseService.matchesMaskedAccount("2500010189648", "2500010189648"),
+    true,
+    "Birhan Bank full account matching exact pattern"
+  );
+  assert.strictEqual(
+    bankResponseService.matchesMaskedAccount("2500*****9648", "2500010189648"),
+    true,
+    "Birhan Bank masked account matching valid prefix and suffix"
+  );
+  const birhanValidation = bankResponseService.validateReceiver(
+    "KINGDOM BUILDERS MINISTRY",
+    "2500010189648",
+    "KINGDOM BUILDERS MINISTRY",
+    "0012521619011"
+  );
+  assert.strictEqual(
+    birhanValidation.isValid,
+    true,
+    "Birhan Bank account automatically validates against official system receiver accounts"
+  );
+  console.log("  ✓ Passed: Masked account matching verified rigorously (Dashen & Birhan)");
 
   // ==========================================================================
   // Test 4: Receiver Name Mismatch -> PENDING

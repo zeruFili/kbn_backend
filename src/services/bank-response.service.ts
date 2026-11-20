@@ -321,6 +321,10 @@ export class BankResponseService {
    */
   readonly DEFAULT_RECEIVER_NAME = process.env.EXPECTED_RECEIVER_NAME || "KINGDOM BUILDERS MINISTRY";
   readonly DEFAULT_RECEIVER_ACCOUNT = process.env.EXPECTED_RECEIVER_ACCOUNT || "0012521619011";
+  readonly DEFAULT_RECEIVER_ACCOUNTS = [
+    process.env.EXPECTED_RECEIVER_ACCOUNT || "0012521619011",
+    "2500010189648",
+  ];
 
   /**
    * Main entrypoint to verify an upstream bank response payload.
@@ -773,7 +777,13 @@ export class BankResponseService {
     expectedAccount: string
   ): ReceiverValidationResult {
     const nameMatches = this.matchesReceiverName(actualName, expectedName);
-    const accountMatches = this.matchesMaskedAccount(actualAccount, expectedAccount);
+    const allowedAccounts = Array.from(
+      new Set([expectedAccount, ...this.DEFAULT_RECEIVER_ACCOUNTS].filter(Boolean))
+    );
+    const matchedExpectedAccount = allowedAccounts.find((acc) =>
+      this.matchesMaskedAccount(actualAccount, acc)
+    );
+    const accountMatches = Boolean(matchedExpectedAccount);
 
     let reason: string | undefined;
     if (!nameMatches && !accountMatches) {
@@ -788,7 +798,7 @@ export class BankResponseService {
       expectedName,
       actualName,
       nameMatches,
-      expectedAccount,
+      expectedAccount: matchedExpectedAccount || expectedAccount,
       actualAccount,
       accountMatches,
       isValid: nameMatches && accountMatches,

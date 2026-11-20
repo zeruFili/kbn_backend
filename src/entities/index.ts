@@ -14,3 +14,4 @@ export { RolePayment } from "./role-payment";
 export { EventRegistration } from "./event-registration";
 export { OtpVerification } from "./otp-verification";
 export { MembershipCategory } from "./membership-category.entity";
+export { LoveGift } from "./love-gift";

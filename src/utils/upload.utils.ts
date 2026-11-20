@@ -14,7 +14,34 @@ export const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
   "image/svg+xml",
   "image/bmp",
+  "image/x-ms-bmp",
+  "image/tiff",
+  "image/x-tiff",
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+  "image/avif",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "image/apng",
+  "image/pjpeg",
+  "image/x-citrix-pjpeg",
+  "image/x-png",
 ]);
+
+export const IMAGE_EXTENSIONS_REGEX =
+  /\.(jpe?g|png|webp|gif|bmp|svg|tiff?|heic|heif|avif|ico|jfif|pjpeg|pjp|raw|cr2|nef|dng)$/i;
+
+export function isAllowedImageOrDoc(mimetype: string, originalname: string, allowedTypes: Set<string>): boolean {
+  if (mimetype.startsWith("image/") || allowedTypes.has(mimetype)) {
+    return true;
+  }
+  if (IMAGE_EXTENSIONS_REGEX.test(originalname)) {
+    return true;
+  }
+  return false;
+}
 
 const ALLOWED_DOC_TYPES = new Set([
   "application/pdf",
@@ -87,7 +114,7 @@ export function createUploadFileMiddleware(options: UploadMiddlewareOptions) {
     storage,
     limits: { fileSize: fileSizeLimit },
     fileFilter: (_req, file, cb) => {
-      if (allowedTypes.has(file.mimetype)) {
+      if (isAllowedImageOrDoc(file.mimetype, file.originalname, allowedTypes)) {
         cb(null, true);
       } else {
         cb(new Error(`File type '${file.mimetype}' is not allowed`));
@@ -206,7 +233,7 @@ export function createUploadFieldsMiddleware(options: UploadFieldsMiddlewareOpti
       if (
         allowAnyType ||
         anyTypeFieldSet.has(file.fieldname) ||
-        allowedTypes.has(file.mimetype)
+        isAllowedImageOrDoc(file.mimetype, file.originalname, allowedTypes)
       ) {
         cb(null, true);
       } else {
@@ -332,7 +359,7 @@ export function processUploadedFiles(
       storage,
       limits: { fileSize: fileSizeLimit },
       fileFilter: (_req, file, cb) => {
-        if (allowedTypes.has(file.mimetype)) {
+        if (isAllowedImageOrDoc(file.mimetype, file.originalname, allowedTypes)) {
           cb(null, true);
         } else {
           cb(new Error(`File type '${file.mimetype}' is not allowed`));

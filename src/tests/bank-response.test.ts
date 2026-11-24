@@ -451,37 +451,42 @@ async function runBankResponseTests() {
   // Test 11: Membership Categories Resolution & Verification
   // ==========================================================================
   console.log("Test 11: Membership Categories Resolution & Verification");
-  assert.strictEqual(MEMBERSHIP_CATEGORIES.length, 4, "Must have exactly 4 membership categories");
+  assert.strictEqual(MEMBERSHIP_CATEGORIES.length, 5, "Must have exactly 5 membership categories");
 
   // 1. Verify canonical package amounts and names
   const beginner = resolveMembershipCategory(MembershipCategory.BEGINNER_PROFESSIONALS_BUSINESS_OWNERS);
   assert.ok(beginner);
-  assert.strictEqual(beginner.amount, 250);
+  assert.strictEqual(beginner.amount, 100);
   assert.strictEqual(beginner.name, "Beginner Professionals & Business Owners");
-  assert.strictEqual(getMembershipCategoryAmount(MembershipCategory.BEGINNER_PROFESSIONALS_BUSINESS_OWNERS), 250);
+  assert.strictEqual(getMembershipCategoryAmount(MembershipCategory.BEGINNER_PROFESSIONALS_BUSINESS_OWNERS), 100);
 
   const developing = resolveMembershipCategory(MembershipCategory.DEVELOPING_PROFESSIONALS_BUSINESS_OWNERS);
   assert.ok(developing);
-  assert.strictEqual(developing.amount, 500);
+  assert.strictEqual(developing.amount, 200);
   assert.strictEqual(developing.name, "Developing Professionals & Business Owners");
 
   const established = resolveMembershipCategory(MembershipCategory.ESTABLISHED_PROFESSIONALS_BUSINESS_OWNERS);
   assert.ok(established);
-  assert.strictEqual(established.amount, 750);
+  assert.strictEqual(established.amount, 400);
   assert.strictEqual(established.name, "Established Professionals & Business Owners");
+
+  const senior = resolveMembershipCategory(MembershipCategory.SENIOR_PROFESSIONALS_BUSINESS_OWNERS);
+  assert.ok(senior);
+  assert.strictEqual(senior.amount, 650);
+  assert.strictEqual(senior.name, "Senior Professionals & Business Owners");
 
   const investors = resolveMembershipCategory(MembershipCategory.INVESTORS_STRATEGIC_PARTNERS);
   assert.ok(investors);
   assert.strictEqual(investors.amount, 1000);
   assert.strictEqual(investors.name, "Investors & Strategic Partners");
 
-  // 2. Exact payment for Beginner tier (250 ETB)
+  // 2. Exact payment for Beginner tier (100 ETB)
   const beginnerPayload = {
     source: "awash-html",
     customer: { customerName: "Aster Aweke" },
     transaction: {
       transactionTime: "2026-10-15 10:00:00 AM",
-      amount: "250 ETB",
+      amount: "100 ETB",
       beneficiaryName: "KINGDOM BUILDERS MINISTRY",
       beneficiaryAccount: "0012521619011",
       transactionId: "AW-BEGINNER-01",
@@ -489,16 +494,16 @@ async function runBankResponseTests() {
   };
   const beginnerResult = bankResponseService.verifyBankResponse({
     payload: beginnerPayload,
-    expectedAmount: 250,
+    expectedAmount: 100,
     membershipCategoryLabel: beginner.name,
   });
   assert.strictEqual(beginnerResult.success, true);
   assert.strictEqual(beginnerResult.status, PaymentStatus.ACCEPTED);
-  assert.strictEqual(beginnerResult.extractedAmount, 250);
+  assert.strictEqual(beginnerResult.extractedAmount, 100);
 
   // 3. Phase 1: Do not verify payment amount based on membership category selected by user
   const phase1CategoryResult = bankResponseService.verifyBankResponse({
-    payload: beginnerPayload, // paid 250 on receipt
+    payload: beginnerPayload, // paid 100 on receipt
     expectedAmount: 1000, // selected 1000 Investors tier
     membershipCategoryLabel: investors.name,
     verifyCategoryAmount: false,
@@ -508,8 +513,8 @@ async function runBankResponseTests() {
 
   // When verifyCategoryAmount: true is explicitly requested (future phase):
   const underpaidCategoryResult = bankResponseService.verifyBankResponse({
-    payload: beginnerPayload, // only paid 250
-    expectedAmount: 500,
+    payload: beginnerPayload, // only paid 100
+    expectedAmount: 200,
     membershipCategoryLabel: developing.name,
     verifyCategoryAmount: true,
   });
@@ -517,13 +522,13 @@ async function runBankResponseTests() {
   assert.strictEqual(underpaidCategoryResult.status, PaymentStatus.PENDING);
   assert.ok(underpaidCategoryResult.reason?.includes("Developing Professionals & Business Owners"));
 
-  // 4. Overpayment for Established tier (paid 1500 ETB for 750 tier -> 2 months)
+  // 4. Overpayment for Established tier (paid 800 ETB for 400 tier -> 2 months)
   const establishedOverpaidPayload = {
     source: "awash-html",
     customer: { customerName: "Dawit Tsige" },
     transaction: {
       transactionTime: "2026-10-15 10:00:00 AM",
-      amount: "1500 ETB",
+      amount: "800 ETB",
       beneficiaryName: "KINGDOM BUILDERS MINISTRY",
       beneficiaryAccount: "0012521619011",
       transactionId: "AW-ESTABLISHED-01",
@@ -531,7 +536,7 @@ async function runBankResponseTests() {
   };
   const establishedOverpaidResult = bankResponseService.verifyBankResponse({
     payload: establishedOverpaidPayload,
-    expectedAmount: 750,
+    expectedAmount: 400,
     membershipCategoryLabel: established.name,
     verifyCategoryAmount: true,
   });
@@ -542,8 +547,8 @@ async function runBankResponseTests() {
   // 5. Expiration calculation with payment.expectedAmount
   const mockPayment = new Payment();
   mockPayment.user_id = "test-user-id";
-  mockPayment.amount = "750.00";
-  mockPayment.expectedAmount = "750.00";
+  mockPayment.amount = "400.00";
+  mockPayment.expectedAmount = "400.00";
   mockPayment.membershipCategory = MembershipCategory.ESTABLISHED_PROFESSIONALS_BUSINESS_OWNERS;
   mockPayment.date = new Date(Date.UTC(2026, 9, 15));
   const expDate = await paymentService.calculateExpirationDateForPayment(mockPayment);
@@ -554,7 +559,7 @@ async function runBankResponseTests() {
   const paymentRecord = new Payment();
   paymentRecord.user_id = "user-uuid-123";
   paymentRecord.membershipCategory = MembershipCategory.DEVELOPING_PROFESSIONALS_BUSINESS_OWNERS;
-  paymentRecord.amount = developing.amount.toFixed(2); // "500.00"
+  paymentRecord.amount = developing.amount.toFixed(2); // "200.00"
   paymentRecord.expectedAmount = developing.amount.toFixed(2);
   paymentRecord.status = PaymentStatus.ACCEPTED;
   paymentRecord.date = new Date(Date.UTC(2026, 9, 15));
@@ -562,7 +567,7 @@ async function runBankResponseTests() {
   const json = paymentRecord.toJSON();
   assert.strictEqual(json.user_id, "user-uuid-123");
   assert.strictEqual(json.membershipCategory, "developing_professionals_business_owners");
-  assert.strictEqual(json.amount, "500.00");
+  assert.strictEqual(json.amount, "200.00");
   assert.strictEqual(json.membershipCategoryLabel, "Developing Professionals & Business Owners");
 
   console.log("  ✓ Passed: Membership category definitions, amounts, validation, and expirations verified");

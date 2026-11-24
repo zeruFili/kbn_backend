@@ -1,8 +1,13 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import dotenv from "dotenv";
+import path from "path";
+import * as Entities from "../entities";
 
 dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
+dotenv.config({ path: path.resolve(__dirname, ".env") });
+dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 
 export const AppDataSource = new DataSource({
   type: "postgres",
@@ -19,7 +24,7 @@ export const AppDataSource = new DataSource({
       ? { rejectUnauthorized: false }
       : false,
 
-  entities: [__dirname + "/../entities/**/*.{ts,js}"],
+  entities: Object.values(Entities),
   migrations: [__dirname + "/../migrations/**/*.{ts,js}"],
   subscribers: [],
 });

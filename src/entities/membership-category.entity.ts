@@ -1,17 +1,26 @@
 import {
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
   Index,
   OneToMany,
+  BeforeInsert,
 } from "typeorm";
+import { v4 as uuidv4 } from "uuid";
 
 @Entity("membership_category")
 export class MembershipCategory {
-  @PrimaryGeneratedColumn("uuid")
+  @PrimaryColumn({ type: "uuid", default: () => "gen_random_uuid()" })
   id: string;
+
+  @BeforeInsert()
+  generateId() {
+    if (!this.id) {
+      this.id = uuidv4();
+    }
+  }
 
   @Index("IDX_membership_category_code", { unique: true })
   @Column({ type: "varchar", length: 100, unique: true })

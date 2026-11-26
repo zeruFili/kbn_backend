@@ -87,6 +87,13 @@ router.patch(
 );
 
 router.patch(
+  "/:id/expiration",
+  authenticate,
+  authorize(UserRole.Admin),
+  (req, res, next) => paymentController.update(req, res, next)
+);
+
+router.patch(
   "/user/:userId/status",
   authenticate,
   authorize(UserRole.Admin),

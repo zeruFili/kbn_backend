@@ -29,8 +29,23 @@ export class UpdatePaymentDto {
   @IsOptional() @IsString() membership_category?: string | null;
   @IsOptional() @IsString() expectedAmount?: string | null;
   @IsOptional() @IsString() expected_amount?: string | null;
-  @IsOptional() @Type(() => Date) @IsDate() expirationDate?: Date | null;
-  @IsOptional() @Type(() => Date) @IsDate() expiration_date?: Date | null;
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "" || value === null || value === undefined) return undefined;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? value : d;
+  })
+  @IsDate()
+  expirationDate?: Date | null;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "" || value === null || value === undefined) return undefined;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? value : d;
+  })
+  @IsDate()
+  expiration_date?: Date | null;
 }
 
 export class PaymentQueryDto {

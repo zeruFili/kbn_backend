@@ -181,6 +181,16 @@ async function runPaymentExpirationTests() {
       rejectedInvalidDate = true;
     }
     assert.strictEqual(rejectedInvalidDate, true, "Invalid date format should fail validation");
+
+    const emptyStringDto = await validateContentDto(UpdatePaymentDto, {
+      expirationDate: "",
+    });
+    assert.strictEqual(emptyStringDto.expirationDate, undefined, "Empty string expirationDate should transform to undefined");
+
+    const nullDto = await validateContentDto(UpdatePaymentDto, {
+      expirationDate: null,
+    });
+    assert.strictEqual(nullDto.expirationDate, undefined, "Null expirationDate should transform to undefined");
     console.log("  ✓ Passed: Expiration date validated properly in DTO");
 
     // -------------------------------------------------------------

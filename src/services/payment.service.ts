@@ -342,6 +342,9 @@ export class PaymentService {
     expirationDate: Date | null;
     daysRemaining: number;
     latestPayment: Payment | null;
+    hasPendingPayment?: boolean;
+    latestPendingPayment?: Payment | null;
+    latestAcceptedPayment?: Payment | null;
   }> {
     if (requester && requester.role !== UserRole.Admin && requester.id !== userId) {
       throw new AppError(403, "Forbidden: You can only access your own payment validity information");
@@ -353,13 +356,17 @@ export class PaymentService {
       order: { created_at: "DESC" },
     });
 
-    if (!latestAcceptedPayment) {
-      const latestAnyPayment = await repo().findOne({
-        where: { user_id: userId },
-        relations: ["membershipCategoryEntity"],
-        order: { created_at: "DESC" },
-      });
+    const latestAnyPayment = await repo().findOne({
+      where: { user_id: userId },
+      relations: ["membershipCategoryEntity"],
+      order: { created_at: "DESC" },
+    });
 
+    const hasPendingPayment = Boolean(
+      latestAnyPayment && latestAnyPayment.status === PaymentStatus.PENDING
+    );
+
+    if (!latestAcceptedPayment) {
       return {
         userId,
         hasPayment: Boolean(latestAnyPayment),
@@ -368,6 +375,8 @@ export class PaymentService {
         expirationDate: null,
         daysRemaining: 0,
         latestPayment: latestAnyPayment || null,
+        hasPendingPayment,
+        latestPendingPayment: hasPendingPayment ? latestAnyPayment : null,
       };
     }
 
@@ -391,7 +400,10 @@ export class PaymentService {
       isExpired,
       expirationDate,
       daysRemaining,
-      latestPayment: latestAcceptedPayment,
+      hasPendingPayment,
+      latestPayment: hasPendingPayment ? latestAnyPayment : latestAcceptedPayment,
+      latestAcceptedPayment,
+      latestPendingPayment: hasPendingPayment ? latestAnyPayment : null,
     };
   }
 
@@ -459,18 +471,24 @@ export class PaymentService {
       payment.expectedAmount = dto.expected_amount;
     }
 
-    const hasExplicitExp = dto.expirationDate !== undefined || dto.expiration_date !== undefined;
-    if (dto.expirationDate !== undefined) {
-      payment.expirationDate = dto.expirationDate;
-    } else if (dto.expiration_date !== undefined) {
-      payment.expirationDate = dto.expiration_date;
-    }
+    const explicitExp = (dto.expirationDate !== undefined && dto.expirationDate !== null && String(dto.expirationDate).trim() !== "")
+      ? dto.expirationDate
+      : ((dto.expiration_date !== undefined && dto.expiration_date !== null && String(dto.expiration_date).trim() !== "")
+        ? dto.expiration_date
+        : undefined);
 
-    // When status is or becomes ACCEPTED (Active):
-    // If no explicit expirationDate was provided, recalculate expirationDate from the acceptance date (today),
-    // ensuring the user receives a full subscription period from the moment of approval.
-    if (payment.status === PaymentStatus.ACCEPTED && !hasExplicitExp) {
-      payment.expirationDate = await this.calculateExpirationDateForPayment(payment, new Date());
+    const hasExplicitExp = explicitExp !== undefined;
+
+    if (hasExplicitExp) {
+      payment.expirationDate = explicitExp ? new Date(explicitExp) : null;
+    } else if (payment.status === PaymentStatus.ACCEPTED) {
+      // If the admin approves the payment without specifying an expiration date,
+      // automatically set the default expiration date to one month after the approval date.
+      const approvalDate = new Date();
+      payment.expirationDate = await this.calculateExpirationDateForPayment(payment, approvalDate);
+      if (!payment.expirationDate) {
+        payment.expirationDate = this.calculateDefaultExpirationDate(approvalDate, 1);
+      }
     }
 
     const saved = await repo().save(payment);
